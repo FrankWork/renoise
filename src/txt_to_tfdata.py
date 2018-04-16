@@ -141,25 +141,33 @@ def write_records(args):
   with tf.python_io.TFRecordWriter(file) as writer:
     for bag_key, bag_value in bags:
       kb_e1_id, kb_e2_id, label = bag_key
+      bag_size = len(bag_value)
+      tokens_list = []
+      dist1_list = []
+      dist2_list = []
+      seq_len_list = []
       for value in bag_value:
         tokens, dist1, dist2, length = value
-        tokens = [tf.train.Feature(int64_list=tf.train.Int64List(value=[t])) for t in tokens]
-        dist1 = [tf.train.Feature(int64_list=tf.train.Int64List(value=[t])) for t in dist1]
-        dist2 = [tf.train.Feature(int64_list=tf.train.Int64List(value=[t])) for t in dist2]
+        
+        tokens_list.append(int64_feature(tokens))
+        dist1_list.append(int64_feature(dist1))
+        dist2_list.append(int64_feature(dist2))
+        seq_len_list.append(int64_feature([length]))
 
-        example = sequence_example(
+      example = sequence_example(
                   context=features({
                       'e1': int64_feature([kb_e1_id]),
                       'e2': int64_feature([kb_e2_id]),
                       'label': int64_feature([label]),
-                      'seq_len': int64_feature([length])
+                      'bag_size': int64_feature([bag_size])
                   }),
                   feature_lists=feature_lists({
-                      "tokens": feature_list(tokens),
-                      "e1_dist": feature_list(dist1),
-                      "e2_dist": feature_list(dist2),
+                      "tokens": feature_list(tokens_list),
+                      "e1_dist": feature_list(dist1_list),
+                      "e2_dist": feature_list(dist2_list),
+                      "seq_len": feature_list(seq_len_list),
                   }))
-        writer.write(example.SerializeToString())
+      writer.write(example.SerializeToString())
 
 
 def convert_data(txt_file, record_file, kb_entity2id, relation2id, vocab2id):

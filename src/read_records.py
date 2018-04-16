@@ -53,11 +53,17 @@ def parse_example(example_proto):
             'e1': tf.FixedLenFeature([], tf.int64),
             'e2': tf.FixedLenFeature([], tf.int64),
             'label': tf.FixedLenFeature([], tf.int64),
-            'seq_len': tf.FixedLenFeature([], tf.int64),}
+            'bag_size': tf.FixedLenFeature([], tf.int64),}
   sequence_features = {
-            "tokens": tf.FixedLenSequenceFeature([], dtype=tf.int64),
-            "e1_dist": tf.FixedLenSequenceFeature([], dtype=tf.int64),
-            "e2_dist": tf.FixedLenSequenceFeature([], dtype=tf.int64),}
+            # "tokens": tf.FixedLenSequenceFeature([], dtype=tf.int64),
+            # "e1_dist": tf.FixedLenSequenceFeature([], dtype=tf.int64),
+            # "e2_dist": tf.FixedLenSequenceFeature([], dtype=tf.int64),
+            "seq_len": tf.FixedLenSequenceFeature([], dtype=tf.int64),
+            "tokens": tf.VarLenFeature(dtype=tf.int64),
+            "e1_dist": tf.VarLenFeature(dtype=tf.int64),
+            "e2_dist": tf.VarLenFeature(dtype=tf.int64),
+            # "seq_len": tf.VarLenFeature(dtype=tf.int64),
+            }
   context_parsed, sequence_parsed = tf.parse_single_sequence_example(
                                   serialized=example_proto,
                                   context_features=context_features,
@@ -66,11 +72,14 @@ def parse_example(example_proto):
   e1 = context_parsed['e1']
   e2 = context_parsed['e2']
   label = context_parsed['label']
-  tokens = sequence_parsed['tokens']
-  e1_dist = sequence_parsed['e1_dist']
-  e2_dist = sequence_parsed['e2_dist']
-  seq_len = context_parsed['seq_len']
-  return e1, e2, label, tokens, e1_dist, e2_dist, seq_len
+  bag_size = context_parsed['bag_size']
+
+  tokens = tf.sparse_tensor_to_dense(sequence_parsed['tokens'])
+  e1_dist = tf.sparse_tensor_to_dense(sequence_parsed['e1_dist'])
+  e2_dist = tf.sparse_tensor_to_dense(sequence_parsed['e2_dist'])
+  seq_len = sequence_parsed['seq_len']
+  
+  return e1, e2, label, bag_size, tokens, e1_dist, e2_dist, seq_len
 
 
 def main(_):
@@ -85,8 +94,8 @@ def main(_):
 
   dataset = dataset.map(parse_example)  # Parse the record into tensors.
   dataset = dataset.shuffle(buffer_size=10000)
-  dataset = dataset.repeat(1)  # Repeat the input indefinitely.
-  dataset = dataset.padded_batch(5, ([], [], [], [None], [None], [None], []))
+  dataset = dataset.repeat(1)  
+  dataset = dataset.padded_batch(5, ([], [], [], [], [None,None], [None,None], [None,None], [None]))
   iterator = dataset.make_initializable_iterator()
   batch_data = iterator.get_next()
 
@@ -96,8 +105,10 @@ def main(_):
   
   with tf.train.MonitoredTrainingSession() as sess:
     sess.run(iterator.initializer, feed_dict={filenames: train_filenames})
-    e1, e2, label, tokens, e1_dist, e2_dist, seq_len = sess.run(batch_data)
-    print(tokens)
+    e1, e2, label, bag_size, tokens, e1_dist, e2_dist, seq_len = sess.run(batch_data)
+    print('bag_size:', bag_size.shape, bag_size)
+    print('seq_len:', seq_len.shape, seq_len)
+    print('tokens:', tokens.shape, tokens)
     
 
 if __name__=='__main__':
