@@ -1,0 +1,4 @@
+data/
+.vscode/
+preprocess/
+tmp*
