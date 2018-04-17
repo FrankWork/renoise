@@ -58,11 +58,11 @@ def parse_example(example_proto):
             # "tokens": tf.FixedLenSequenceFeature([], dtype=tf.int64),
             # "e1_dist": tf.FixedLenSequenceFeature([], dtype=tf.int64),
             # "e2_dist": tf.FixedLenSequenceFeature([], dtype=tf.int64),
-            "seq_len": tf.FixedLenSequenceFeature([], dtype=tf.int64),
+            # "seq_len": tf.FixedLenSequenceFeature([], dtype=tf.int64),
             "tokens": tf.VarLenFeature(dtype=tf.int64),
             "e1_dist": tf.VarLenFeature(dtype=tf.int64),
             "e2_dist": tf.VarLenFeature(dtype=tf.int64),
-            # "seq_len": tf.VarLenFeature(dtype=tf.int64),
+            "seq_len": tf.VarLenFeature(dtype=tf.int64),
             }
   context_parsed, sequence_parsed = tf.parse_single_sequence_example(
                                   serialized=example_proto,
@@ -74,13 +74,29 @@ def parse_example(example_proto):
   label = context_parsed['label']
   bag_size = context_parsed['bag_size']
 
-  tokens = tf.sparse_tensor_to_dense(sequence_parsed['tokens'])
-  e1_dist = tf.sparse_tensor_to_dense(sequence_parsed['e1_dist'])
-  e2_dist = tf.sparse_tensor_to_dense(sequence_parsed['e2_dist'])
+  # tokens = tf.sparse_tensor_to_dense(sequence_parsed['tokens'])
+  # e1_dist = tf.sparse_tensor_to_dense(sequence_parsed['e1_dist'])
+  # e2_dist = tf.sparse_tensor_to_dense(sequence_parsed['e2_dist'])
+  tokens = sequence_parsed['tokens']
+  e1_dist = sequence_parsed['e1_dist']
+  e2_dist = sequence_parsed['e2_dist']
   seq_len = sequence_parsed['seq_len']
   
   return e1, e2, label, bag_size, tokens, e1_dist, e2_dist, seq_len
 
+
+def parse_batch_sparse(*args):
+  e1, e2, label, bag_size, tokens, e1_dist, e2_dist, seq_len=args
+  
+  # shape = tf.shape(batch_sparse_tensors)
+  
+  # result = SparseTensor(
+  # input.indices, map_fn(fn, input.values), input.dense_shape)
+  # tf.map_fn()
+  # tokens = tf.sparse_tensor_to_dense(tokens)
+  # tf.rank(tokens.indices)
+  
+  return e1,e2,label, bag_size, seq_len.values, tokens.indices[:,-1]
 
 def main(_):
   if not os.path.exists(FLAGS.out_dir):
@@ -95,7 +111,9 @@ def main(_):
   dataset = dataset.map(parse_example)  # Parse the record into tensors.
   dataset = dataset.shuffle(buffer_size=10000)
   dataset = dataset.repeat(1)  
-  dataset = dataset.padded_batch(5, ([], [], [], [], [None,None], [None,None], [None,None], [None]))
+  # dataset = dataset.padded_batch(5, ([], [], [], [], [None,None], [None,None], [None,None], [None]))
+  dataset = dataset.batch(5)
+  dataset = dataset.map(parse_batch_sparse)
   iterator = dataset.make_initializable_iterator()
   batch_data = iterator.get_next()
 
@@ -105,10 +123,23 @@ def main(_):
   
   with tf.train.MonitoredTrainingSession() as sess:
     sess.run(iterator.initializer, feed_dict={filenames: train_filenames})
-    e1, e2, label, bag_size, tokens, e1_dist, e2_dist, seq_len = sess.run(batch_data)
-    print('bag_size:', bag_size.shape, bag_size)
-    print('seq_len:', seq_len.shape, seq_len)
-    print('tokens:', tokens.shape, tokens)
+    # x = sess.run(batch_data)
+    # print(x)
+    # e1, e2, label, bag_size, tokens, e1_dist, e2_dist, seq_len = sess.run(batch_data)
+    # # print('bag_size:', bag_size.shape, bag_size)
+    # # print('seq_len:', seq_len.shape, seq_len)
+    # # print('tokens:', tokens.shape, tokens)
+    # print('bag_size:',  bag_size)
+    # print('seq_len:',  seq_len)
+    # print('tokens:',  tokens)
+    e1,e2,label, bag_size, seq_len, tokens = sess.run(batch_data)
+    print(e1)
+    print(e2)
+    print(label)
+    print(bag_size)
+    print(seq_len)
+    print(tokens)
+    print(np.sum(seq_len), np.shape(tokens)[0])
     
 
 if __name__=='__main__':
