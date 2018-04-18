@@ -136,7 +136,9 @@ def main(_):
   # Initialize `iterator` with training data.
   train_filenames = [os.path.join(FLAGS.out_dir, FLAGS.train_records)+'.%d'%i 
                      for i in range(FLAGS.num_threads)]
-  
+  from model import CNNModel
+  m = CNNModel()
+
   with tf.train.MonitoredTrainingSession() as sess:
     sess.run(iterator.initializer, feed_dict={filenames: train_filenames})
     # x = sess.run(batch_data)
