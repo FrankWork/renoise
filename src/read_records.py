@@ -88,15 +88,31 @@ def parse_example(example_proto):
 def parse_batch_sparse(*args):
   e1, e2, label, bag_size, tokens, e1_dist, e2_dist, seq_len=args
   
-  # shape = tf.shape(batch_sparse_tensors)
-  
-  # result = SparseTensor(
-  # input.indices, map_fn(fn, input.values), input.dense_shape)
-  # tf.map_fn()
-  # tokens = tf.sparse_tensor_to_dense(tokens)
-  # tf.rank(tokens.indices)
-  
-  return e1,e2,label, bag_size, seq_len.values, tokens.indices[:,-1]
+  n_sent = tf.reduce_sum(bag_size)
+  idx0 = tf.constant([], dtype=tf.int64)
+  idx1 = tf.constant([], dtype=tf.int64)
+  i = tf.constant(0, dtype=tf.int64)
+  shape_invariants=[i.get_shape(), tf.TensorShape([None]),tf.TensorShape([None])]
+  def body(i, a, b):
+    a = tf.concat([a, i*tf.ones(seq_len.values[i], dtype=tf.int64)], axis=0)
+    b = tf.concat([b, tf.range(seq_len.values[i], dtype=tf.int64)], axis=0)
+    return i+1, a, b
+  _, idx0, idx1 = tf.while_loop(lambda i, a, b: i<n_sent, 
+                                body, [i, idx0, idx1], shape_invariants)
+  idx = tf.stack([idx0,idx1], axis=-1)
+
+  max_len = tf.reduce_max(seq_len.values)
+
+  dense_shape = [n_sent, max_len]
+  tokens = tf.SparseTensor(idx, tokens.values, dense_shape)
+  e1_dist = tf.SparseTensor(idx, e1_dist.values, dense_shape)
+  e2_dist = tf.SparseTensor(idx, e2_dist.values, dense_shape)
+
+  tokens = tf.sparse_tensor_to_dense(tokens)
+  e1_dist = tf.sparse_tensor_to_dense(e1_dist)
+  e2_dist = tf.sparse_tensor_to_dense(e2_dist)
+
+  return e1,e2,label, bag_size, seq_len.values, tokens, e1_dist, e2_dist
 
 def main(_):
   if not os.path.exists(FLAGS.out_dir):
@@ -125,21 +141,18 @@ def main(_):
     sess.run(iterator.initializer, feed_dict={filenames: train_filenames})
     # x = sess.run(batch_data)
     # print(x)
-    # e1, e2, label, bag_size, tokens, e1_dist, e2_dist, seq_len = sess.run(batch_data)
+    e1, e2, label, bag_size, seq_len, tokens, e1_dist, e2_dist = sess.run(batch_data)
     # # print('bag_size:', bag_size.shape, bag_size)
     # # print('seq_len:', seq_len.shape, seq_len)
     # # print('tokens:', tokens.shape, tokens)
     # print('bag_size:',  bag_size)
-    # print('seq_len:',  seq_len)
+    print('seq_len:',  seq_len)
     # print('tokens:',  tokens)
-    e1,e2,label, bag_size, seq_len, tokens = sess.run(batch_data)
-    print(e1)
-    print(e2)
-    print(label)
-    print(bag_size)
-    print(seq_len)
-    print(tokens)
-    print(np.sum(seq_len), np.shape(tokens)[0])
+    
+    ts = []
+    for i in tokens[0]:
+      ts.append(vocab[i])
+    print(' '.join(ts))
     
 
 if __name__=='__main__':
