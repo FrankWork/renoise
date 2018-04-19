@@ -24,6 +24,7 @@ flags.DEFINE_string("test_records", "test.records","")
 
 flags.DEFINE_integer("max_bag_size", 100, "")
 flags.DEFINE_integer("num_threads", 10, "")
+flags.DEFINE_integer("max_len", 220, "")
 FLAGS = flags.FLAGS
 
 feature = tf.train.Feature
@@ -177,7 +178,14 @@ def convert_data(txt_file, record_file, kb_entity2id, relation2id, vocab2id):
                                       os.path.basename(record_file)))
   with open(txt_file) as f:
     for line in f:
-      parts = f.readline().strip().split('\t')
+      line = re.sub('-lrb-', ' ', line)
+      line = re.sub('-rrb-', ' ', line)
+      line = re.sub("''", ' ', line)
+      line = re.sub('\/', ' ', line)
+      line = re.sub('-rrb-', ' ', line)
+      line = re.sub(' {2,}', ' ', line)
+
+      parts = line.strip().split('\t')
       
       e1_kb, e2_kb = parts[0], parts[1]
       e1_str, e2_str, relation = parts[2], parts[3], parts[4]
@@ -188,6 +196,9 @@ def convert_data(txt_file, record_file, kb_entity2id, relation2id, vocab2id):
       label = relation2id[relation] if relation in relation2id else relation2id['NA']
 
       length = len(sentence)
+      if length>FLAGS.max_len:
+        continue
+
       tokens = [vocab2id[x] if x in vocab2id else vocab2id['UNK'] 
                      for x in sentence]
 
@@ -210,6 +221,7 @@ def convert_data(txt_file, record_file, kb_entity2id, relation2id, vocab2id):
   
   # import pickle
   # pickle.dump(data, open('/tmp/data.pkl', 'wb'))
+  
 
   bags_shard = [list() for i in range(FLAGS.num_threads)]
   j=0
@@ -220,6 +232,7 @@ def convert_data(txt_file, record_file, kb_entity2id, relation2id, vocab2id):
       bags_shard[j%FLAGS.num_threads].append( (key, arr[i:i+FLAGS.max_bag_size]) )
       j+=1
     # data[key] = [arr[i:i+FLAGS.max_bag_size] for i in range(0, len(arr), FLAGS.max_bag_size)]
+  
   del data
 
   print("write records file ")
@@ -231,8 +244,6 @@ def convert_data(txt_file, record_file, kb_entity2id, relation2id, vocab2id):
       pool.join()
   except KeyboardInterrupt:
       pool.terminate()
-
-
 
 def main(_):
   if not os.path.exists(FLAGS.out_dir):
@@ -248,9 +259,9 @@ def main(_):
   convert_data(os.path.join(FLAGS.data_dir, FLAGS.txt_train_file),
                os.path.join(FLAGS.out_dir, FLAGS.train_records),
                entity2id, relation2id, vocab2id)
-  # convert_data(os.path.join(FLAGS.data_dir, FLAGS.txt_test_file),
-  #              os.path.join(FLAGS.out_dir, FLAGS.test_records),
-  #              entity2id, relation2id, vocab2id)
+  convert_data(os.path.join(FLAGS.data_dir, FLAGS.txt_test_file),
+               os.path.join(FLAGS.out_dir, FLAGS.test_records),
+               entity2id, relation2id, vocab2id)
 
 if __name__=='__main__':
   tf.app.run()

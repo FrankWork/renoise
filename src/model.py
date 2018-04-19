@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 class CNNModel(object):
-  def __init__(self, hparams, word2vec, batch_data, training):
+  def __init__(self, hparams, word2vec, batch_data, training=False):
     e1, e2, label, bag_size, bag_idx, seq_len, tokens, e1_dist, e2_dist = batch_data
     xavier = tf.contrib.layers.xavier_initializer()
     self.hparams = hparams
@@ -27,10 +27,12 @@ class CNNModel(object):
       self._input = tf.concat([self.inputs, self.pos_embed], 2)
       self.conv = tf.layers.conv1d(self._input, num_filters, kernel_size,
               activation=tf.nn.relu, kernel_initializer=xavier, padding='same')
-      pool_max = tf.layers.max_pooling1d(self.conv, pool_size=max_len, strides=1)
+      # pool_max = tf.layers.max_pooling1d(self.conv, pool_size=max_len, strides=1)
+      # pool_max = tf.squeeze(pool_max)
+      pool_max = tf.reduce_max(self.conv, axis=1)
       pooled = tf.layers.dropout(pool_max, training=training)
-    
-    with tf.name_scope("map"):
+      
+    with tf.name_scope("att"):
       W = tf.get_variable(
           "W",
           shape=[num_filters, num_rels],
@@ -51,31 +53,24 @@ class CNNModel(object):
       self.predictions = []
       self.losses = []
       self.accuracy = []
+
       
       # selective attention model, use the weighted sum of all related the sentence vectors as bag representation
       n_bags = tf.shape(label)[0]
       ini_score_arr = tf.TensorArray(tf.float32, size=n_bags)
       def body(i, score_arr):
         sen_r = pooled[bag_idx[i]:bag_idx[i+1]] # shape (n_sent,feat_size)
-        n_sent = bag_size[i]
-        sen_alpha = tf.reshape(
-                      tf.nn.softmax(
-                        tf.reshape(
+        sen_alpha = tf.nn.softmax(
                           tf.matmul(
-                            tf.multiply(sen_r, sen_a), sen_q), 
-                        [n_sent])), 
-                    [1, n_sent])
-        sen_s = tf.reshape(
-                  tf.matmul(sen_alpha, sen_r), 
-                [1, num_filters])
-        bag_vec = tf.reshape(tf.nn.xw_plus_b(sen_s, W, b), [num_rels])
+                            tf.multiply(sen_r, sen_a), sen_q, name='alpha'), 
+                          axis=0
+                        ) # (n_sent,1)
+        sen_s = tf.matmul(sen_alpha, sen_r, transpose_a=True, name='att_sum') #(1,feat_size)
+        bag_vec = tf.squeeze(tf.nn.xw_plus_b(sen_s, W, b)) # (num_rels)
+        # bag_vec = tf.reshape(tf.nn.xw_plus_b(sen_s, W, b), [num_rels])
         return i+1, score_arr.write(i, tf.nn.softmax(bag_vec))
       _, bag_score_arr = tf.while_loop(lambda i, ta: i<n_bags, body, [0, ini_score_arr])
       self.bag_score = bag_score_arr.stack()
-
-      
-      
-
 
         # with tf.name_scope("output"):
         #   self.predictions.append(tf.argmax(self.bag_score[i], 0, name="predictions"))
