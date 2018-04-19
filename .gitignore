@@ -2,3 +2,4 @@ data/
 .vscode/
 preprocess/
 tmp*
+__pycache__

@@ -19,6 +19,7 @@ flags.DEFINE_string("test_records", "test.records","")
 
 flags.DEFINE_integer("max_bag_size", 100, "")
 flags.DEFINE_integer("num_threads", 10, "")
+flags.DEFINE_integer("batch_size", 100, "")
 FLAGS = flags.FLAGS
 
 def load_vocab():
@@ -87,7 +88,7 @@ def parse_example(example_proto):
 
 def parse_batch_sparse(*args):
   e1, e2, label, bag_size, tokens, e1_dist, e2_dist, seq_len=args
-  
+
   n_sent = tf.reduce_sum(bag_size)
   idx0 = tf.constant([], dtype=tf.int64)
   idx1 = tf.constant([], dtype=tf.int64)
@@ -112,7 +113,33 @@ def parse_batch_sparse(*args):
   e1_dist = tf.sparse_tensor_to_dense(e1_dist)
   e2_dist = tf.sparse_tensor_to_dense(e2_dist)
 
-  return e1,e2,label, bag_size, seq_len.values, tokens, e1_dist, e2_dist
+  bag_idx = tf.scan(lambda a, x: a+x, tf.pad(bag_size, [[1,0]]))
+  return e1,e2,label, bag_size, bag_idx, seq_len.values, tokens, e1_dist, e2_dist
+
+def length_statistics(length):
+    '''get maximum, mean, quantile info for length'''
+    length = sorted(length)
+    length = np.asarray(length)
+
+    # p7 = np.percentile(length, 70)
+    # Probability{length < p7} = 0.7
+    percent = [50, 70, 80, 90, 95, 98, 100]
+    quantile = [np.percentile(length, p) for p in percent]
+    
+    tf.logging.info('(percent, quantile) %s' % str(list(zip(percent, quantile))))
+
+def get_length(self):
+
+    length = []
+    for i, file in enumerate([TRAIN_RECORD, TEST_RECORD]):
+      reader = tf.python_io.tf_record_iterator(file)
+      for record in reader:
+        x = tf.train.SequenceExample()
+        x.ParseFromString(record)
+        n = len(x.features.feature["sentence"].int64_list.value)
+        length.append(n)
+    return length
+
 
 def main(_):
   if not os.path.exists(FLAGS.out_dir):
@@ -128,7 +155,7 @@ def main(_):
   dataset = dataset.shuffle(buffer_size=10000)
   dataset = dataset.repeat(1)  
   # dataset = dataset.padded_batch(5, ([], [], [], [], [None,None], [None,None], [None,None], [None]))
-  dataset = dataset.batch(5)
+  dataset = dataset.batch(FLAGS.batch_size)
   dataset = dataset.map(parse_batch_sparse)
   iterator = dataset.make_initializable_iterator()
   batch_data = iterator.get_next()
@@ -136,25 +163,43 @@ def main(_):
   # Initialize `iterator` with training data.
   train_filenames = [os.path.join(FLAGS.out_dir, FLAGS.train_records)+'.%d'%i 
                      for i in range(FLAGS.num_threads)]
-  from model import CNNModel
-  m = CNNModel()
+  # from model import CNNModel
+  # m = CNNModel()
+  
+  e1, e2, label, bag_size, bag_idx, seq_len, tokens, e1_dist, e2_dist = batch_data
+  
 
   with tf.train.MonitoredTrainingSession() as sess:
     sess.run(iterator.initializer, feed_dict={filenames: train_filenames})
     # x = sess.run(batch_data)
     # print(x)
-    e1, e2, label, bag_size, seq_len, tokens, e1_dist, e2_dist = sess.run(batch_data)
-    # # print('bag_size:', bag_size.shape, bag_size)
-    # # print('seq_len:', seq_len.shape, seq_len)
-    # # print('tokens:', tokens.shape, tokens)
-    # print('bag_size:',  bag_size)
-    print('seq_len:',  seq_len)
-    # print('tokens:',  tokens)
-    
-    ts = []
-    for i in tokens[0]:
-      ts.append(vocab[i])
-    print(' '.join(ts))
+
+    while not sess.should_stop():
+      
+      exit()
+      
+      # e1, e2, label, bag_size, bag_idx, seq_len, tokens, e1_dist, e2_dist = sess.run(batch_data)
+      
+      # bag_idx = tf.scan(lambda a, x: a+x, tf.pad(bag_size, [[1,0]]))
+      # bags = []
+      # print(bag_size)
+      # # print(bag_size.shape)
+      # for i in range(FLAGS.batch_size):
+      #   bags.append(tokens[bag_idx[i]:bag_idx[i+1]])
+        # print(bags[i])
+    # for i in 
+    # print(bags)
+      # # print('bag_size:', bag_size.shape, bag_size)
+      # # print('seq_len:', seq_len.shape, seq_len)
+      # # print('tokens:', tokens.shape, tokens)
+      # print('bag_size:',  bag_size)
+      # print('seq_len:',  seq_len)
+      # print('tokens:',  tokens)
+      
+      # ts = []
+      # for i in tokens[0]:
+      #   ts.append(vocab[i])
+      # print(' '.join(ts))
     
 
 if __name__=='__main__':
