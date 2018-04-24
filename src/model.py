@@ -11,9 +11,12 @@ class CNNModel(object):
     max_len = self.hparams.max_len
     num_rels = self.hparams.num_rels
     batch_size = self.hparams.batch_size
+    learning_rate = self.hparams.learning_rate
+    l2_coef = self.hparams.l2_coef
+    self.training = training
 
     with tf.device('/cpu:0'):
-      embedding = tf.Variable(word2vec, dtype=tf.float32)
+      embedding = tf.Variable(word2vec, dtype=tf.float32, name="word2vec")
       self.inputs = tf.nn.embedding_lookup(embedding, tokens)
     
     with tf.name_scope('joint'):
@@ -30,29 +33,29 @@ class CNNModel(object):
       # pool_max = tf.layers.max_pooling1d(self.conv, pool_size=max_len, strides=1)
       # pool_max = tf.squeeze(pool_max)
       pool_max = tf.reduce_max(self.conv, axis=1)
-      pooled = tf.layers.dropout(pool_max, training=training)
+      pooled = tf.layers.dropout(pool_max, training=self.training)
       
-    with tf.name_scope("att"):
+    with tf.name_scope("attention"):
       W = tf.get_variable(
           "W",
           shape=[num_filters, num_rels],
           initializer=xavier)
       b = tf.get_variable("b", shape=[num_rels], initializer=xavier)
       self.total_loss = 0.0
-      self.total_loss += tf.nn.l2_loss(W)
-      self.total_loss += tf.nn.l2_loss(b)
+      self.total_loss += l2_coef * tf.nn.l2_loss(W)
+      # self.total_loss += tf.nn.l2_loss(b)
 
       # the implementation of Lin et al 2016 comes from https://github.com/thunlp/TensorFlow-NRE/blob/master/network.py
       sen_a = tf.get_variable("attention_A", [num_filters], initializer=xavier)
       sen_q = tf.get_variable("query", [num_filters, 1], initializer=xavier)
-      sen_r = []
-      sen_s = []
-      sen_out = []
-      sen_alpha = []
-      self.bag_score = []
-      self.predictions = []
-      self.losses = []
-      self.accuracy = []
+      # sen_r = []
+      # sen_s = []
+      # sen_out = []
+      # sen_alpha = []
+      # self.bag_score = []
+      # self.predictions = []
+      # self.losses = []
+      # self.accuracy = []
 
       
       # selective attention model, use the weighted sum of all related the sentence vectors as bag representation
@@ -72,25 +75,22 @@ class CNNModel(object):
       _, bag_score_arr = tf.while_loop(lambda i, ta: i<n_bags, body, [0, ini_score_arr])
       self.bag_score = bag_score_arr.stack()
 
-        # with tf.name_scope("output"):
-        #   self.predictions.append(tf.argmax(self.bag_score[i], 0, name="predictions"))
+    with tf.name_scope("output"):
+      self.prob = tf.nn.softmax(self.bag_score, axis=1)
+      self.predictions = tf.argmax(self.bag_score, axis=1, name="predictions")
+      self.total_loss += tf.reduce_mean(
+                              tf.nn.softmax_cross_entropy_with_logits_v2(
+                                  labels=tf.one_hot(label, num_rels), 
+                                  logits=self.bag_score))
+      self.accuracy=tf.reduce_mean(
+                        tf.cast(
+                          tf.equal(self.predictions, label), 
+                          tf.float32), 
+                        name="accuracy")
 
-        # with tf.name_scope("loss"):
-        #   nscor = self.soft_label_flag[i] * self.bag_score[i] + joint_p * tf.reduce_max(self.bag_score[i])* tf.cast(self.preds[i], tf.float32)
-        #   self.nlabel = tf.reshape(tf.one_hot(indices=[tf.argmax(nscor, 0)], depth=num_rels, dtype=tf.int32), [num_rels])
-        #   self.ccc = self.preds[i]
-        #   self.losses.append(tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=sen_out[i], labels=self.nlabel)))
-
-        #   if i == 0:
-        #       self.total_loss = self.losses[i]
-        #   else:
-        #       self.total_loss += self.losses[i]
-
-        # with tf.name_scope("accuracy"):
-        #   self.accuracy.append(tf.reduce_mean(tf.cast(tf.equal(self.predictions[i], tf.argmax(self.preds[i], 0)), "float"), name="accuracy"))
-
-        # with tf.name_scope("update"):
-        #   self.global_step = tf.Variable(0, name="global_step", trainable=False)
-        #   optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
-        #   self.train_op = optimizer.minimize(self.total_loss, global_step=self.global_step)
+    if self.training:
+      with tf.name_scope("training"):
+        self.global_step = tf.train.get_or_create_global_step()
+        optimizer = tf.train.AdamOptimizer(learning_rate=self.hparams.learning_rate)
+        self.train_op = optimizer.minimize(self.total_loss, global_step=self.global_step)
 

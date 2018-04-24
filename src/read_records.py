@@ -2,6 +2,7 @@ import os
 import numpy as np
 import tensorflow as tf
 from model import CNNModel
+import logging
 
 flags = tf.app.flags
 
@@ -126,6 +127,7 @@ def get_hparams():
         max_len = FLAGS.max_len,
         num_rels = 53,
         batch_size = FLAGS.batch_size,
+        l2_coef = 1e-3,
         )
   return hparams
 
@@ -158,9 +160,13 @@ def main(_):
   with tf.train.MonitoredTrainingSession() as sess:
     sess.run(iterator.initializer, feed_dict={filenames: train_filenames})
 
-    while not sess.should_stop():
-      score = sess.run(m.bag_score)
-      print(score)
+    for tv in tf.trainable_variables():
+      print(tv)
+    # while not sess.should_stop():
+    #   s = sess.run(m.bag_score)
+    #   print(s.shape)
+      # _, loss, acc = sess.run([m.train_op, m.total_loss, m.accuracy])
+      # print(loss, acc)
       
       # e1, e2, label, bag_size, bag_idx, seq_len, tokens, e1_dist, e2_dist = sess.run(batch_data)
       
@@ -187,4 +193,8 @@ def main(_):
     
 
 if __name__=='__main__':
+  tf.logging.set_verbosity(tf.logging.INFO)
+  log = logging.getLogger('tensorflow')
+  fh = logging.FileHandler('tmp.log')
+  log.addHandler(fh)
   tf.app.run()
