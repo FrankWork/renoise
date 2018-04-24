@@ -114,6 +114,7 @@ def parse_batch_sparse(*args):
   e2_dist = tf.sparse_tensor_to_dense(e2_dist)
 
   bag_idx = tf.scan(lambda a, x: a+x, tf.pad(bag_size, [[1,0]]))
+  bag_idx = tf.cast(bag_idx, tf.int32)
   return e1,e2,label, bag_size, bag_idx, seq_len.values, tokens, e1_dist, e2_dist
 
 def get_hparams():
@@ -130,6 +131,62 @@ def get_hparams():
         l2_coef = 1e-3,
         )
   return hparams
+
+def train_input_fn(features, labels, batch_size):
+  """An input function for training"""
+  # Convert the inputs to a Dataset.
+  dataset = tf.data.Dataset.from_tensor_slices((dict(features), labels))
+
+  # Shuffle, repeat, and batch the examples.
+  dataset = dataset.shuffle(1000).repeat().batch(batch_size)
+
+  # Return the read end of the pipeline.
+  return dataset.make_one_shot_iterator().get_next()
+
+def my_model_fn(
+   features, # This is batch_features from input_fn
+   labels,   # This is batch_labels from input_fn
+   mode,     # An instance of tf.estimator.ModeKeys
+   params):  # Additional configuration
+  # Compute predictions.
+  predicted_classes = tf.argmax(logits, 1)
+  if mode == tf.estimator.ModeKeys.PREDICT:
+      predictions = {
+          'class_ids': predicted_classes[:, tf.newaxis],
+          'probabilities': tf.nn.softmax(logits),
+          'logits': logits,
+      }
+      return tf.estimator.EstimatorSpec(mode, predictions=predictions)
+  
+  # Compute evaluation metrics.
+  accuracy = tf.metrics.accuracy(labels=labels,
+                               predictions=predicted_classes,
+                               name='acc_op')
+                               metrics = {'accuracy': accuracy}
+  tf.summary.scalar('accuracy', accuracy[1])
+
+  if mode == tf.estimator.ModeKeys.EVAL:
+      return tf.estimator.EstimatorSpec(
+          mode, loss=loss, eval_metric_ops=metrics)
+
+  return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
+
+
+
+
+
+classifier = tf.estimator.Estimator(
+    model_fn=my_model,
+    params={
+        'feature_columns': my_feature_columns,
+        # Two hidden layers of 10 nodes each.
+        'hidden_units': [10, 10],
+        # The model must choose between 3 classes.
+        'n_classes': 3,
+    })
+
+classifier.train(input_fn=lambda: my_input_fn(FILE_TRAIN, True, 500))
+
 
 def main(_):
   if not os.path.exists(FLAGS.out_dir):
@@ -162,9 +219,9 @@ def main(_):
 
     for tv in tf.trainable_variables():
       print(tv)
-    # while not sess.should_stop():
-    #   s = sess.run(m.bag_score)
-    #   print(s.shape)
+    while not sess.should_stop():
+      s = sess.run(m.bag_score)
+      print(s.shape)
       # _, loss, acc = sess.run([m.train_op, m.total_loss, m.accuracy])
       # print(loss, acc)
       

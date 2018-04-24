@@ -62,18 +62,19 @@ class CNNModel(object):
       n_bags = tf.shape(label)[0]
       ini_score_arr = tf.TensorArray(tf.float32, size=n_bags)
       def body(i, score_arr):
-        sen_r = pooled[bag_idx[i]:bag_idx[i+1]] # shape (n_sent,feat_size)
+        with tf.name_scope('dynamic'):
+          sen_r = pooled[bag_idx[i]:bag_idx[i+1]] # shape (n_sent,feat_size)
         sen_alpha = tf.nn.softmax(
                           tf.matmul(
-                            tf.multiply(sen_r, sen_a), sen_q, name='alpha'), 
-                          axis=0
-                        ) # (n_sent,1)
+                            tf.multiply(sen_r, sen_a), sen_q, name='alpha_mul'), 
+                          axis=0,
+                          name='alpha') # (n_sent,1)
         sen_s = tf.matmul(sen_alpha, sen_r, transpose_a=True, name='att_sum') #(1,feat_size)
         bag_vec = tf.squeeze(tf.nn.xw_plus_b(sen_s, W, b)) # (num_rels)
         # bag_vec = tf.reshape(tf.nn.xw_plus_b(sen_s, W, b), [num_rels])
         return i+1, score_arr.write(i, tf.nn.softmax(bag_vec))
       _, bag_score_arr = tf.while_loop(lambda i, ta: i<n_bags, body, [0, ini_score_arr])
-      self.bag_score = bag_score_arr.stack()
+      self.bag_score = bag_score_arr.stack(name='bag_score')
 
     with tf.name_scope("output"):
       self.prob = tf.nn.softmax(self.bag_score, axis=1)
