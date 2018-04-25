@@ -1,18 +1,19 @@
 import tensorflow as tf
 
 class CNNModel(object):
-  def __init__(self, hparams, word2vec, batch_data, training=False):
-    e1, e2, label, bag_size, bag_idx, seq_len, tokens, e1_dist, e2_dist = batch_data
+  def __init__(self, params, word2vec, features, labels, training=False):
+    e1, e2, bag_size, bag_idx, seq_len, tokens, e1_dist, e2_dist = features
     xavier = tf.contrib.layers.xavier_initializer()
-    self.hparams = hparams
-    pos_dim = self.hparams.pos_dim
-    num_filters = self.hparams.num_filters
-    kernel_size = self.hparams.kernel_size
-    max_len = self.hparams.max_len
-    num_rels = self.hparams.num_rels
-    batch_size = self.hparams.batch_size
-    learning_rate = self.hparams.learning_rate
-    l2_coef = self.hparams.l2_coef
+    
+    self.params = params
+    pos_dim = self.params["pos_dim"]
+    num_filters = self.params["num_filters"]
+    kernel_size = self.params["kernel_size"]
+    max_len = self.params["max_len"]
+    num_rels = self.params["num_rels"]
+    batch_size = self.params["batch_size"]
+    learning_rate = self.params["learning_rate"]
+    l2_coef = self.params["l2_coef"]
     self.training = training
 
     with tf.device('/cpu:0'):
@@ -45,21 +46,13 @@ class CNNModel(object):
       self.total_loss += l2_coef * tf.nn.l2_loss(W)
       # self.total_loss += tf.nn.l2_loss(b)
 
-      # the implementation of Lin et al 2016 comes from https://github.com/thunlp/TensorFlow-NRE/blob/master/network.py
+      # the implementation of Lin et al 2016 comes from 
+      # https://github.com/thunlp/TensorFlow-NRE/blob/master/network.py
       sen_a = tf.get_variable("attention_A", [num_filters], initializer=xavier)
       sen_q = tf.get_variable("query", [num_filters, 1], initializer=xavier)
-      # sen_r = []
-      # sen_s = []
-      # sen_out = []
-      # sen_alpha = []
-      # self.bag_score = []
-      # self.predictions = []
-      # self.losses = []
-      # self.accuracy = []
 
-      
       # selective attention model, use the weighted sum of all related the sentence vectors as bag representation
-      n_bags = tf.shape(label)[0]
+      n_bags = tf.shape(labels)[0]
       ini_score_arr = tf.TensorArray(tf.float32, size=n_bags)
       def body(i, score_arr):
         with tf.name_scope('dynamic'):
@@ -81,17 +74,15 @@ class CNNModel(object):
       self.predictions = tf.argmax(self.bag_score, axis=1, name="predictions")
       self.total_loss += tf.reduce_mean(
                               tf.nn.softmax_cross_entropy_with_logits_v2(
-                                  labels=tf.one_hot(label, num_rels), 
+                                  labels=tf.one_hot(labels, num_rels), 
                                   logits=self.bag_score))
-      self.accuracy=tf.reduce_mean(
-                        tf.cast(
-                          tf.equal(self.predictions, label), 
-                          tf.float32), 
-                        name="accuracy")
+
+      self.accuracy = tf.metrics.accuracy(labels=labels,
+                                    predictions=self.predictions)
 
     if self.training:
       with tf.name_scope("training"):
         self.global_step = tf.train.get_or_create_global_step()
-        optimizer = tf.train.AdamOptimizer(learning_rate=self.hparams.learning_rate)
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
         self.train_op = optimizer.minimize(self.total_loss, global_step=self.global_step)
 
