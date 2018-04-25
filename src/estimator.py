@@ -157,6 +157,48 @@ def test_input_fn():
                      for i in range(FLAGS.num_threads)]
   return _input_fn(test_filenames, 1, FLAGS.batch_size, shuffle=False)
 
+
+
+class PatTopKHook(tf.train.SessionRunHook):
+  def __init__(self, prob_tensor, labels_tensor):
+    self.prob_tensor = prob_tensor
+    self.labels_tensor = labels_tensor
+    self.all_prob=[]
+    self.all_labels = []
+  
+  def before_run(self, run_context):
+    return tf.train.SessionRunArgs([self.prob_tensor, self.labels_tensor])
+  
+  def after_run(self, run_context, run_values):
+    prob, label = run_values.results
+    self.all_prob.append(prob)
+    self.all_labels.append(label)
+
+  def end(self, session):
+    all_prob = np.concatenate(self.all_prob, axis=0)
+    all_labels = np.concatenate(self.all_labels,axis=0)
+    
+    bag_size, num_class = all_prob.shape
+    mask = np.ones([num_class])
+    mask[0]=0
+    mask_prob = np.reshape(all_prob*mask, [-1])
+    idx_prob = mask_prob.argsort()
+
+    one_hot_labels = np.zeros([bag_size, num_class])
+    one_hot_labels[np.arange(bag_size), all_labels] = 1
+    one_hot_labels = np.reshape(one_hot_labels, [-1])
+
+    idx = idx_prob[-100:][::-1]
+    p100 = np.mean(one_hot_labels[idx])
+    idx = idx_prob[-200:][::-1]
+    p200 = np.mean(one_hot_labels[idx])
+    idx = idx_prob[-500:][::-1]
+    p500 = np.mean(one_hot_labels[idx])
+
+    tf.logging.info("p@100: %.3f p@200: %.3f p@500: %.3f" % (p100, p200, p500))
+    tf.logging.info(all_prob[-1][:5])
+
+
 def my_model(features, labels, mode, params):
   """DNN with three hidden layers, and dropout of 0.1 probability."""
   vocab, vocab2id = load_vocab()
@@ -171,14 +213,16 @@ def my_model(features, labels, mode, params):
   tf.summary.scalar('accuracy', m.accuracy[1])
 
   if mode == tf.estimator.ModeKeys.EVAL:
+        p_hook = PatTopKHook(m.prob, labels)
         return tf.estimator.EstimatorSpec(
-            mode, loss=m.total_loss, eval_metric_ops=metrics)
+            mode, loss=m.total_loss, eval_metric_ops=metrics, evaluation_hooks=[p_hook])
 
   # Create training op.
   assert mode == tf.estimator.ModeKeys.TRAIN
 
   logging_hook = tf.train.LoggingTensorHook({"loss" : m.total_loss, 
-  "accuracy" : m.accuracy[1]}, every_n_iter=10)
+  "accuracy" : m.accuracy[1]}, every_n_iter=50)
+  
 
   return tf.estimator.EstimatorSpec(mode, loss=m.total_loss, train_op=m.train_op, 
                 training_hooks = [logging_hook])
@@ -191,7 +235,7 @@ def main(_):
   classifier = tf.estimator.Estimator(
         model_fn=my_model,
         params=params)
-  classifier.train(input_fn=train_input_fn)
+  classifier.train(input_fn=train_input_fn, steps=50)
 
   eval_result = classifier.evaluate(input_fn=test_input_fn)
   tf.logging.info('\nTest set accuracy: {accuracy:0.3f}\n'.format(**eval_result))
