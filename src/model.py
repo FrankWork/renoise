@@ -17,7 +17,8 @@ class CNNModel(object):
     self.training = training
 
     with tf.device('/cpu:0'):
-      embedding = tf.Variable(word2vec, dtype=tf.float32, name="word2vec")
+      # embedding = tf.Variable(word2vec, dtype=tf.float32, name="word2vec")
+      embedding = tf.get_variable("word2vec", initializer=word2vec)
       self.inputs = tf.nn.embedding_lookup(embedding, tokens)
     
     with tf.name_scope('joint'):
@@ -70,15 +71,28 @@ class CNNModel(object):
       self.bag_score = bag_score_arr.stack(name='bag_score')
 
     with tf.name_scope("output"):
-      self.prob = tf.nn.softmax(self.bag_score, axis=1)
-      self.predictions = tf.argmax(self.bag_score, axis=1, name="predictions")
       self.total_loss += tf.reduce_mean(
                               tf.nn.softmax_cross_entropy_with_logits_v2(
                                   labels=tf.one_hot(labels, num_rels), 
                                   logits=self.bag_score))
 
+      self.prob = tf.nn.softmax(self.bag_score, axis=1)
+      self.predictions = tf.argmax(self.bag_score, axis=1, name="predictions")
       self.accuracy = tf.metrics.accuracy(labels=labels,
                                     predictions=self.predictions)
+
+      # ignore label 0
+      # mask = tf.range(num_rels)
+      # mask = tf.cast(mask>0, tf.float32)
+      # self.mask_prob = self.prob * mask
+      # self.mask_predictions = tf.argmax(self.mask_prob, axis=1, name="mask_predictions")
+      
+      label_mask = labels > 0
+      mask_labels = tf.boolean_mask(labels, label_mask)
+      mask_predictions = tf.boolean_mask(self.predictions, label_mask)
+      
+      self.mask_accuracy = tf.metrics.accuracy(labels=mask_labels,
+                                    predictions=mask_predictions)
 
     if self.training:
       with tf.name_scope("training"):

@@ -157,8 +157,8 @@ def write_records(args):
 
       example = sequence_example(
                   context=features({
-                      'e1': int64_feature([kb_e1_id]),
-                      'e2': int64_feature([kb_e2_id]),
+                      'e1': int64_feature([0]),
+                      'e2': int64_feature([0]),
                       'label': int64_feature([label]),
                       'bag_size': int64_feature([bag_size])
                   }),
@@ -170,29 +170,29 @@ def write_records(args):
                   }))
       writer.write(example.SerializeToString())
 
+def clean_str(line):
+  line = re.sub('-lrb-', ' ', line)
+  line = re.sub('-rrb-', ' ', line)
+  line = re.sub("''", ' ', line)
+  line = re.sub('\\\/', ' ', line) # remove '\/' in line
+  line = re.sub('-rrb-', ' ', line)
+  line = re.sub(' {2,}', ' ', line)
+  return line
 
-def convert_data(txt_file, record_file, kb_entity2id, relation2id, vocab2id):
+def convert_data(txt_file, record_file, kb_entity2id, relation2id, vocab2id, shard=True):
   data = {}
-
+  
   print("convert data from %s to %s"%(os.path.basename(txt_file), 
                                       os.path.basename(record_file)))
   with open(txt_file) as f:
     for line in f:
-      line = re.sub('-lrb-', ' ', line)
-      line = re.sub('-rrb-', ' ', line)
-      line = re.sub("''", ' ', line)
-      line = re.sub('\/', ' ', line)
-      line = re.sub('-rrb-', ' ', line)
-      line = re.sub(' {2,}', ' ', line)
-
       parts = line.strip().split('\t')
       
       e1_kb, e2_kb = parts[0], parts[1]
       e1_str, e2_str, relation = parts[2], parts[3], parts[4]
-      sentence = parts[5].strip('###END###').split()
-
-      kb_e1_id = kb_entity2id[e1_kb] if e1_kb in kb_entity2id else kb_entity2id['UNK']
-      kb_e2_id = kb_entity2id[e2_kb] if e2_kb in kb_entity2id else kb_entity2id['UNK']
+      sentence = clean_str(parts[5].strip('###END###')).split()
+      # kb_e1_id = kb_entity2id[e1_kb] if e1_kb in kb_entity2id else kb_entity2id['UNK']
+      # kb_e2_id = kb_entity2id[e2_kb] if e2_kb in kb_entity2id else kb_entity2id['UNK']
       label = relation2id[relation] if relation in relation2id else relation2id['NA']
 
       length = len(sentence)
@@ -213,7 +213,7 @@ def convert_data(txt_file, record_file, kb_entity2id, relation2id, vocab2id):
       dist2 = [distance_feature(i-e2_idx) for i in range(length)]
       
 
-      bag_key = (kb_e1_id, kb_e2_id, label) #e1_str+'||'+e2_str+'||'+relation
+      bag_key = (e1_str, e2_str, label) #e1_str+'||'+e2_str+'||'+relation
       bag_value = (tokens, dist1, dist2, length)
       if bag_key not in data:
         data[bag_key]=[]
@@ -221,29 +221,37 @@ def convert_data(txt_file, record_file, kb_entity2id, relation2id, vocab2id):
   
   # import pickle
   # pickle.dump(data, open('/tmp/data.pkl', 'wb'))
-  
 
-  bags_shard = [list() for i in range(FLAGS.num_threads)]
-  j=0
-  for key in data:
-    # slice a big bag into small bags
-    arr = data[key]
-    for i in range(0, len(arr), FLAGS.max_bag_size):
-      bags_shard[j%FLAGS.num_threads].append( (key, arr[i:i+FLAGS.max_bag_size]) )
-      j+=1
-    # data[key] = [arr[i:i+FLAGS.max_bag_size] for i in range(0, len(arr), FLAGS.max_bag_size)]
   
-  del data
+  if shard:
+    bags_shard = [list() for i in range(FLAGS.num_threads)]
+    j=0
+    for key in data:
+      # slice a big bag into small bags
+      arr = data[key]
+      for i in range(0, len(arr), FLAGS.max_bag_size):
+        bags_shard[j%FLAGS.num_threads].append( (key, arr[i:i+FLAGS.max_bag_size]) )
+        j+=1
+      # data[key] = [arr[i:i+FLAGS.max_bag_size] for i in range(0, len(arr), FLAGS.max_bag_size)]
+    
+    del data
 
-  print("write records file ")
-  records_files = [record_file+'.%d'%i for i in range(FLAGS.num_threads)]
-  pool = multiprocessing.Pool(FLAGS.num_threads)
-  try:
-      pool.map_async(write_records, zip(records_files, bags_shard)).get(999999)
-      pool.close()
-      pool.join()
-  except KeyboardInterrupt:
-      pool.terminate()
+    print("write records file ")
+    records_files = [record_file+'.%d'%i for i in range(FLAGS.num_threads)]
+    pool = multiprocessing.Pool(FLAGS.num_threads)
+    try:
+        pool.map_async(write_records, zip(records_files, bags_shard)).get(999999)
+        pool.close()
+        pool.join()
+    except KeyboardInterrupt:
+        pool.terminate()
+  else:
+    bags = []
+    for key in data:
+      bags.append( (key, data[key]) )
+    del data
+    print("write records file ")
+    write_records( (record_file, bags) )
 
 def main(_):
   if not os.path.exists(FLAGS.out_dir):
@@ -261,7 +269,7 @@ def main(_):
                entity2id, relation2id, vocab2id)
   convert_data(os.path.join(FLAGS.data_dir, FLAGS.txt_test_file),
                os.path.join(FLAGS.out_dir, FLAGS.test_records),
-               entity2id, relation2id, vocab2id)
+               entity2id, relation2id, vocab2id, shard=False)
 
 if __name__=='__main__':
   tf.app.run()

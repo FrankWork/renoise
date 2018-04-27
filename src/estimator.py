@@ -20,7 +20,7 @@ flags.DEFINE_integer("max_bag_size", 100, "")
 flags.DEFINE_integer("num_threads", 10, "")
 flags.DEFINE_integer("batch_size", 100, "")
 flags.DEFINE_integer("max_len", 220, "")
-flags.DEFINE_integer("epochs", 1, "")
+flags.DEFINE_integer("epochs", 25, "")
 
 FLAGS = flags.FLAGS
 
@@ -153,8 +153,7 @@ def train_input_fn():
   return _input_fn(train_filenames, FLAGS.epochs, FLAGS.batch_size, shuffle=True)
 
 def test_input_fn():
-  test_filenames = [os.path.join(FLAGS.out_dir, FLAGS.test_records)+'.%d'%i 
-                     for i in range(FLAGS.num_threads)]
+  test_filenames = [os.path.join(FLAGS.out_dir, FLAGS.test_records) ]
   return _input_fn(test_filenames, 1, FLAGS.batch_size, shuffle=False)
 
 
@@ -177,6 +176,10 @@ class PatTopKHook(tf.train.SessionRunHook):
   def end(self, session):
     all_prob = np.concatenate(self.all_prob, axis=0)
     all_labels = np.concatenate(self.all_labels,axis=0)
+
+    np.save('prob.npy', all_prob)
+    np.save('labels.npy', all_labels)
+    tf.logging.info('save results to .npy file')
     
     bag_size, num_class = all_prob.shape
     mask = np.ones([num_class])
@@ -209,7 +212,7 @@ def my_model(features, labels, mode, params):
   m = CNNModel(params, word_embed, features, labels, training)
   
   # Compute evaluation metrics.
-  metrics = {'accuracy': m.accuracy}
+  metrics = {'accuracy': m.accuracy, 'mask_accuracy': m.mask_accuracy}
   tf.summary.scalar('accuracy', m.accuracy[1])
 
   if mode == tf.estimator.ModeKeys.EVAL:
@@ -221,7 +224,8 @@ def my_model(features, labels, mode, params):
   assert mode == tf.estimator.ModeKeys.TRAIN
 
   logging_hook = tf.train.LoggingTensorHook({"loss" : m.total_loss, 
-  "accuracy" : m.accuracy[1]}, every_n_iter=50)
+              "accuracy" : m.accuracy[0], 'mask_accuracy': m.mask_accuracy[0]}, 
+               every_n_iter=50)
   
 
   return tf.estimator.EstimatorSpec(mode, loss=m.total_loss, train_op=m.train_op, 
@@ -234,8 +238,9 @@ def main(_):
   params = get_params()
   classifier = tf.estimator.Estimator(
         model_fn=my_model,
+        model_dir="saved_models/model-cnn/",
         params=params)
-  classifier.train(input_fn=train_input_fn, steps=50)
+  classifier.train(input_fn=train_input_fn)
 
   eval_result = classifier.evaluate(input_fn=test_input_fn)
   tf.logging.info('\nTest set accuracy: {accuracy:0.3f}\n'.format(**eval_result))

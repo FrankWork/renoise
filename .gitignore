@@ -3,3 +3,6 @@ data/
 preprocess/
 tmp*
 __pycache__
+labels.npy
+prob.npy
+saved_models/
