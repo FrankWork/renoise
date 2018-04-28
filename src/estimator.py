@@ -20,7 +20,7 @@ flags.DEFINE_integer("max_bag_size", 100, "")
 flags.DEFINE_integer("num_threads", 10, "")
 flags.DEFINE_integer("batch_size", 100, "")
 flags.DEFINE_integer("max_len", 220, "")
-flags.DEFINE_integer("epochs", 1, "")
+flags.DEFINE_integer("epochs", 10, "")
 flags.DEFINE_integer("log_freq", 50, "")
 
 FLAGS = flags.FLAGS
@@ -110,8 +110,9 @@ def _parse_batch_sparse(*args):
   i = tf.constant(0, dtype=tf.int64)
   shape_invariants=[i.get_shape(), tf.TensorShape([None]),tf.TensorShape([None])]
   def body(i, a, b):
-    a = tf.concat([a, i*tf.ones(seq_len.values[i], dtype=tf.int64)], axis=0)
-    b = tf.concat([b, tf.range(seq_len.values[i], dtype=tf.int64)], axis=0)
+    length = seq_len.values[i]
+    a = tf.concat([a, i*tf.ones([tf.cast(length, tf.int32)], dtype=tf.int64)], axis=0)
+    b = tf.concat([b, tf.range(length, dtype=tf.int64)], axis=0)
     return i+1, a, b
   _, idx0, idx1 = tf.while_loop(lambda i, a, b: i<n_sent, 
                                 body, [i, idx0, idx1], shape_invariants)

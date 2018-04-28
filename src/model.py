@@ -30,12 +30,13 @@ class CNNModel(object):
         pos1 = tf.nn.embedding_lookup(pos1_embed, e1_dist)
         pos2 = tf.nn.embedding_lookup(pos2_embed, e2_dist)
       inputs = tf.concat([tokens, pos1, pos2], 2)
+      inputs = tf.layers.dropout(inputs, rate=0.2, training=self.training)
 
     with tf.name_scope('cnn-encoder'):
       conv = tf.layers.conv1d(inputs, num_filters, kernel_size,
               activation=tf.nn.relu, kernel_initializer=xavier, padding='same')
-      pool_max = tf.reduce_max(conv, axis=1)
-      sentence_vec = tf.layers.dropout(pool_max, training=self.training)
+      sentence_vec = tf.reduce_max(conv, axis=1)
+      # sentence_vec = tf.layers.dropout(pool_max, training=self.training)
     
     # with tf.name_scope('rnn-encoder'):
     #   cell_forward = tf.nn.rnn_cell.GRUCell(gru_size)
@@ -85,6 +86,7 @@ class CNNModel(object):
                           axis=0,
                           name='alpha') # (n_sent,1)
         sen_s = tf.matmul(sen_alpha, sen_r, transpose_a=True, name='att_sum') #(1,feat_size)
+        sen_s = tf.layers.dropout(sen_s, training=self.training)
         bag_vec = tf.squeeze(tf.nn.xw_plus_b(sen_s, W, b)) # (num_rels)
         # bag_vec = tf.reshape(tf.nn.xw_plus_b(sen_s, W, b), [num_rels])
         return i+1, score_arr.write(i, bag_vec)
