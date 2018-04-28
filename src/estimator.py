@@ -20,20 +20,21 @@ flags.DEFINE_integer("max_bag_size", 100, "")
 flags.DEFINE_integer("num_threads", 10, "")
 flags.DEFINE_integer("batch_size", 100, "")
 flags.DEFINE_integer("max_len", 220, "")
-flags.DEFINE_integer("epochs", 25, "")
+flags.DEFINE_integer("epochs", 1, "")
+flags.DEFINE_integer("log_freq", 50, "")
 
 FLAGS = flags.FLAGS
 
 def get_params():
   return {
-        "learning_rate": 0.01, 
+        "learning_rate": 0.001, 
         "pos_dim" : 5,
         "num_filters" : 230,
         "kernel_size" : 3,
         "max_len" : FLAGS.max_len,
         "num_rels" : 53,
         "batch_size" : FLAGS.batch_size,
-        "l2_coef" : 1e-3,
+        "l2_coef" : 1e-4,
   }
 
 
@@ -225,7 +226,7 @@ def my_model(features, labels, mode, params):
 
   logging_hook = tf.train.LoggingTensorHook({"loss" : m.total_loss, 
               "accuracy" : m.accuracy[0], 'mask_accuracy': m.mask_accuracy[0]}, 
-               every_n_iter=50)
+               every_n_iter=FLAGS.log_freq)
   
 
   return tf.estimator.EstimatorSpec(mode, loss=m.total_loss, train_op=m.train_op, 
@@ -243,7 +244,7 @@ def main(_):
   classifier.train(input_fn=train_input_fn)
 
   eval_result = classifier.evaluate(input_fn=test_input_fn)
-  tf.logging.info('\nTest set accuracy: {accuracy:0.3f}\n'.format(**eval_result))
+  tf.logging.info('\nTest set accuracy: {accuracy:0.3f} {mask_accuracy:0.3f}\n'.format(**eval_result))
 
   # with tf.train.MonitoredTrainingSession() as sess:
   #  sess.run(iterator.initializer, feed_dict={filenames: train_filenames})

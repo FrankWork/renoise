@@ -1,0 +1,11 @@
+rnn batch size 100, 50 update, 60 sec, 
+cnn batch size 100, 50 update, 10 sec 
+
+rnn 
+p @ n epoch 3
+0.84
+0.74
+0.67
+
+cnn epoch 1
+p@100: 0.650 p@200: 0.625 p@500: 0.572
