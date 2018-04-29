@@ -59,15 +59,6 @@ class CNNModel(object):
     #     sentence_vec = tf.squeeze(sentence_vec)
 
     with tf.name_scope("attention"):
-      W = tf.get_variable(
-          "W",
-          shape=[num_filters, num_rels],
-          initializer=xavier)
-      b = tf.get_variable("b", shape=[num_rels], initializer=xavier)
-      # self.total_loss = 0.0
-      # self.total_loss += l2_coef * tf.nn.l2_loss(W)
-      # self.total_loss += tf.nn.l2_loss(b)
-
       # the implementation of Lin et al 2016 comes from 
       # https://github.com/thunlp/TensorFlow-NRE/blob/master/network.py
       sen_a = tf.get_variable("attention_A", [num_filters], initializer=xavier)
@@ -75,8 +66,7 @@ class CNNModel(object):
 
       # selective attention model, use the weighted sum of all related the sentence vectors as bag representation
       n_bags = tf.shape(labels)[0]
-      ini_score_arr = tf.TensorArray(tf.float32, size=n_bags)
-      def body(i, score_arr):
+      def fn(i):
         with tf.name_scope('dynamic'):
           sen_r = tf.tanh(sentence_vec[bag_idx[i]:bag_idx[i+1]]) # shape (n_sent,feat_size)
           # sen_r = sentence_vec[bag_idx[i]:bag_idx[i+1]] # shape (n_sent,feat_size)
@@ -86,12 +76,13 @@ class CNNModel(object):
                           axis=0,
                           name='alpha') # (n_sent,1)
         sen_s = tf.matmul(sen_alpha, sen_r, transpose_a=True, name='att_sum') #(1,feat_size)
-        sen_s = tf.layers.dropout(sen_s, training=self.training)
-        bag_vec = tf.squeeze(tf.nn.xw_plus_b(sen_s, W, b)) # (num_rels)
-        # bag_vec = tf.reshape(tf.nn.xw_plus_b(sen_s, W, b), [num_rels])
-        return i+1, score_arr.write(i, bag_vec)
-      _, bag_score_arr = tf.while_loop(lambda i, ta: i<n_bags, body, [0, ini_score_arr])
-      self.bag_score = bag_score_arr.stack(name='bag_score')
+        return tf.squeeze(sen_s)
+      bag_vec = tf.map_fn(fn, tf.range(n_bags), dtype=tf.float32, 
+                    parallel_iterations=50)
+
+      bag_vec = tf.layers.dropout(bag_vec, training=self.training) # (n_bag, feat_size)
+      self.bag_score = tf.layers.dense(bag_vec, num_rels)
+      
 
     with tf.name_scope("output"):
       self.total_loss = tf.contrib.layers.apply_regularization(regularizer=

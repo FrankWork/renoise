@@ -1,4 +1,5 @@
 import os
+import time
 import numpy as np
 import tensorflow as tf
 from model import CNNModel
@@ -16,11 +17,10 @@ flags.DEFINE_string("kb_entity_embed_file", "kb_entity_embed.npy", "")
 flags.DEFINE_string("train_records", "train.records","")
 flags.DEFINE_string("test_records", "test.records","")
 
-flags.DEFINE_integer("max_bag_size", 100, "")
 flags.DEFINE_integer("num_threads", 10, "")
 flags.DEFINE_integer("batch_size", 100, "")
 flags.DEFINE_integer("max_len", 220, "")
-flags.DEFINE_integer("epochs", 10, "")
+flags.DEFINE_integer("epochs", 1, "")
 flags.DEFINE_integer("log_freq", 50, "")
 
 FLAGS = flags.FLAGS
@@ -237,6 +237,7 @@ def main(_):
   if not os.path.exists(FLAGS.out_dir):
     os.makedirs(FLAGS.out_dir)
   
+  start_time = time.time()
   params = get_params()
   classifier = tf.estimator.Estimator(
         model_fn=my_model,
@@ -246,7 +247,8 @@ def main(_):
 
   eval_result = classifier.evaluate(input_fn=test_input_fn)
   tf.logging.info('\nTest set accuracy: {accuracy:0.3f} {mask_accuracy:0.3f}\n'.format(**eval_result))
-
+  duration = time.time() - start_time
+  tf.logging.info("duration: %.2f hours" % (duration/3600))
   # with tf.train.MonitoredTrainingSession() as sess:
   #  sess.run(iterator.initializer, feed_dict={filenames: train_filenames})
   #  while not sess.should_stop():
