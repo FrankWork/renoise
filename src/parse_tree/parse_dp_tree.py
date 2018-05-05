@@ -4,11 +4,11 @@ import argparse
 import multiprocessing
 import re
 import time
+import sys
 
-
-# parser = argparse.ArgumentParser()
-# parser.add_argument('-d', '--data_dir', default="%s/work/data/nyt_text_data/RE" % home_dir, help='dir')
-# args = parser.parse_args()
+parser = argparse.ArgumentParser()
+parser.add_argument('--max_sent', default=50, help='max sent per parse')
+args = parser.parse_args()
 
 home_dir = os.environ['HOME']
 project_dir = home_dir+"/work/relation-extraction/renoise"
@@ -29,7 +29,7 @@ test_sents_file = project_dir+"/preprocess/test.sents"
 train_dp_tree_file = project_dir+"/preprocess/train.tree.pkl"
 test_dp_tree_file = project_dir+"/preprocess/test.tree.pkl"
 
-max_sent = 1000 # max sentences per parse
+max_sent = args.max_sent # max sentences per parse
 num_threads = 10
 
 def clean_str(line):
@@ -69,7 +69,8 @@ def parse_and_save_fn(args):
 
     duration = time.time() - start_time
     n_sents = len(chunks[i])
-    print('parse %d sentences, %.1f sents/sec' % (n_sents, n_sents/duration))
+    print('parse %d sentences, %.1f sec/sent' % (n_sents, duration/n_sents))
+    sys.stdout.flush()
   
   f.close()
 
