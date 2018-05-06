@@ -7,10 +7,12 @@ import time
 import sys
 
 home_dir = os.environ['HOME']
-default_dir = home_dir+"/renoise"#"/work/relation-extraction/renoise"
+default_dir = "."#home_dir+"/renoise"#"/work/relation-extraction/renoise"
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--max_sent', default=300, help='max sent per parse')
+parser.add_argument('--max_sent', default=100, type=int, help='max sent per parse')
+parser.add_argument('--job_idx', default=0, type=int, help='job_idx')
+parser.add_argument('--job_type', default="train", help='train or test')
 parser.add_argument('--project_dir', default=default_dir, help='project dir')
 args = parser.parse_args()
 
@@ -23,8 +25,8 @@ args = parser.parse_args()
 # # Dependency Tree
 # from nltk.parse.stanford import StanfordDependencyParser
 
-origin_train_file = args.project_dir+"/data/RE/train.txt"
-origin_test_file = args.project_dir+"/data/RE/test.txt"
+origin_train_file = args.project_dir+"/train.txt"
+origin_test_file = args.project_dir+"/test.txt"
 
 sents_dir = args.project_dir + "/tmp_parser/sents"
 lex_dir = args.project_dir + "/tmp_parser/lex"
@@ -69,20 +71,53 @@ def get_sentence_from_data(in_file, out_file):
   sys.stdout.flush()
 
 
-def parse(sents_dir):
-  parser_sh = args.project_dir+"/src/parse_tree/parser.sh"
+def parse_with_states(sents_dir):
+  if args.job_idx == 0 and args.job_type=='train':
+    state_file = args.project_dir + "/tmp_parser/state.pkl"
+  else:
+    state_file = args.project_dir + "/tmp_parser/state.%s.pkl.%d" %(args.job_type, args.job_idx)
+
+  if os.path.exists(state_file):
+    with open(state_file, 'rb') as f:
+      state = pickle.load(f)
+    print(state)
+  else:
+    state = set()
+
+  # parser_sh = args.project_dir+"/src/parse_tree/parser.sh"
+  parser_sh = args.project_dir+"/parser.sh"  
+
   for filename in os.listdir(sents_dir):
-    in_path = os.path.join(sents_dir, filename)
-    out_path = os.path.join(lex_dir, filename)
-    os.system('bash %s %s %s'%(parser_sh, in_path, out_path))
+    type, idx = filename.split('.')
+    if type != args.job_type:
+      continue
+    idx = int(idx)
+    if idx>= args.job_idx and idx < args.job_idx + 500:
+      if filename not in state:
+        in_path = os.path.join(sents_dir, filename)
+        out_path = os.path.join(lex_dir, filename)
+        if os.system('bash %s %s %s'%(parser_sh, in_path, out_path)) == 0:
+          state.add(filename)
+          with open(state_file, 'wb') as f:
+            pickle.dump(state, f)
+        else:
+          exit()
+        
+    
   
 
-# get_sentence_from_data(origin_train_file, train_sents_file)
-# get_sentence_from_data(origin_test_file, test_sents_file)
+get_sentence_from_data(origin_train_file, train_sents_file)
+get_sentence_from_data(origin_test_file, test_sents_file)
 
-parse(sents_dir)
+parse_with_states(sents_dir)
 
+# nohup python parse_dp_tree.py --job_type train --job_idx 1000 &
+# [0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000]
 
+# extract sentences from train.txt
+# write 5701 files
+# extract sentences from test.txt
+# write 1725 files
 
 
 
