@@ -6,31 +6,40 @@ import re
 import time
 import sys
 
+home_dir = os.environ['HOME']
+default_dir = home_dir+"/renoise"#"/work/relation-extraction/renoise"
+
 parser = argparse.ArgumentParser()
-parser.add_argument('--max_sent', default=50, help='max sent per parse')
+parser.add_argument('--max_sent', default=300, help='max sent per parse')
+parser.add_argument('--project_dir', default=default_dir, help='project dir')
 args = parser.parse_args()
 
-home_dir = os.environ['HOME']
-project_dir = home_dir+"/work/relation-extraction/renoise"
 
-parser_model_path= home_dir+"/bin/stanford-parser-full-2018-02-27/"
-os.environ['STANFORD_PARSER'] = parser_model_path+'/stanford-parser.jar'
-os.environ['STANFORD_MODELS'] = parser_model_path+'/stanford-parser-3.9.1-models.jar'
 
-# Dependency Tree
-from nltk.parse.stanford import StanfordDependencyParser
+# parser_model_path= home_dir+"/bin/stanford-parser-full-2018-02-27/"
+# os.environ['STANFORD_PARSER'] = parser_model_path+'/stanford-parser.jar'
+# os.environ['STANFORD_MODELS'] = parser_model_path+'/stanford-parser-3.9.1-models.jar'
 
-origin_train_file = project_dir+"/data/RE/train.txt"
-origin_test_file = project_dir+"/data/RE/test.txt"
+# # Dependency Tree
+# from nltk.parse.stanford import StanfordDependencyParser
 
-train_sents_file = project_dir+"/preprocess/train.sents"
-test_sents_file = project_dir+"/preprocess/test.sents"
+origin_train_file = args.project_dir+"/data/RE/train.txt"
+origin_test_file = args.project_dir+"/data/RE/test.txt"
 
-train_dp_tree_file = project_dir+"/preprocess/train.tree.pkl"
-test_dp_tree_file = project_dir+"/preprocess/test.tree.pkl"
+sents_dir = args.project_dir + "/tmp_parser/sents"
+lex_dir = args.project_dir + "/tmp_parser/lex"
 
-max_sent = args.max_sent # max sentences per parse
-num_threads = 10
+train_sents_file = sents_dir+"/train"
+test_sents_file = sents_dir+"/test"
+
+train_lex_file = lex_dir+"/train"
+test_lex_file = lex_dir+"/test"
+
+if not os.path.exists(sents_dir):
+  os.makedirs(sents_dir)
+if not os.path.exists(lex_dir):
+  os.makedirs(lex_dir)
+
 
 def clean_str(line):
   line = re.sub('-lrb-', '(', line)
@@ -42,14 +51,47 @@ def clean_str(line):
 
 def get_sentence_from_data(in_file, out_file):
   print("extract sentences from %s" % os.path.basename(in_file))
-  of = open(out_file, 'w')
+  sentences = []
   with open(in_file) as f:
     for line in f:
       parts = line.strip().split('\t')
       sentence = parts[5].strip('###END###').lower().strip()
       sentence = clean_str(sentence)
-      of.write('%s\n' % sentence)
-  of.close()
+      sentences.append(sentence)
+  
+  n_shards = 0
+  for i in range(0, len(sentences), args.max_sent):
+    with open("%s.%d" %(out_file, n_shards), 'w') as f:
+      for sent in sentences[i:i+args.max_sent]:
+        f.write(sent+'\n')
+    n_shards+=1
+  print("write %d files" % n_shards)
+  sys.stdout.flush()
+
+
+def parse(sents_dir):
+  parser_sh = args.project_dir+"/src/parse_tree/parser.sh"
+  for filename in os.listdir(sents_dir):
+    in_path = os.path.join(sents_dir, filename)
+    out_path = os.path.join(lex_dir, filename)
+    os.system('bash %s %s %s'%(parser_sh, in_path, out_path))
+  
+
+# get_sentence_from_data(origin_train_file, train_sents_file)
+# get_sentence_from_data(origin_test_file, test_sents_file)
+
+parse(sents_dir)
+
+
+
+
+
+
+
+
+
+
+
 
 def parse_and_save_fn(args):
   sentences, out_filename = args
@@ -98,20 +140,15 @@ def parse_and_save_async(in_filename, out_filename):
   except KeyboardInterrupt:
     pool.terminate()
 
-
-  
-
 def load_graphs(pickle_file):
   with open(pickle_file, 'rb') as f:
     graphs = pickle.load(f)
   return graphs
 
 
-# get_sentence_from_data(origin_train_file, train_sents_file)
-# get_sentence_from_data(origin_test_file, test_sents_file)
 
 # parse_and_save_async(train_sents_file, train_dp_tree_file)
-parse_and_save_async(test_sents_file, test_dp_tree_file)
+# parse_and_save_async(test_sents_file, test_dp_tree_file)
 
 # graphs = load_graphs('test.head.np')
 
@@ -134,23 +171,6 @@ parse_and_save_async(test_sents_file, test_dp_tree_file)
 # dog     case    over
 # dog     det     the
 # dog     amod    lazy
-
-# import pickle
-
-# arr = list(range(10))
-# f = open('tmp.txt', 'wb')
-# for i in arr:
-#   pickle.dump(i, f)
-# f.close()
-
-# f = open('tmp.txt', 'rb')
-# try:
-#   while True:
-#     i = pickle.load(f)
-#     print(i)
-# except EOFError:
-#   pass
-# f.close()
 
 
 
