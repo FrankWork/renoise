@@ -25,23 +25,6 @@ args = parser.parse_args()
 # # Dependency Tree
 # from nltk.parse.stanford import StanfordDependencyParser
 
-origin_train_file = args.project_dir+"/train.txt"
-origin_test_file = args.project_dir+"/test.txt"
-
-sents_dir = args.project_dir + "/tmp_parser/sents"
-lex_dir = args.project_dir + "/tmp_parser/lex"
-
-train_sents_file = sents_dir+"/train"
-test_sents_file = sents_dir+"/test"
-
-train_lex_file = lex_dir+"/train"
-test_lex_file = lex_dir+"/test"
-
-if not os.path.exists(sents_dir):
-  os.makedirs(sents_dir)
-if not os.path.exists(lex_dir):
-  os.makedirs(lex_dir)
-
 
 def clean_str(line):
   line = re.sub('-lrb-', '(', line)
@@ -50,42 +33,109 @@ def clean_str(line):
   line = re.sub('\\\/', ' ', line) # remove '\/' in line
   line = re.sub(' {2,}', ' ', line)
   return line
+ 
+def get_sentence_from_data(in_file, out_dir):
+  print("extract  sentences from %s"   % in_file)
+  basename, _ =  in_file.split('.'  ) 
 
-def get_sentence_from_data(in_file, out_file):
-  print("extract sentences from %s" % os.path.basename(in_file))
-  sentences = []
-  with open(in_file) as f:
-    for line in f:
+  len60, len100,  len200, len3000 = set(), set(), set(), set()
+  with oplen200_ file) as f:
+    for llen3000n f:
       parts = line.strip().split('\t')
       sentence = parts[5].strip('###END###').lower().strip()
       sentence = clean_str(sentence)
-      sentences.append(sentence)
+      tokens = sentence.split()
+      n = len(tokens)
+      if n <= 60:
+        len60.add(sentence)
+      elif n>60 and n<=100:
+        len100.add(sentence)
+      elif n>100 and n<=200:
+        len200.add(sentence)
+      elif n>200 and n<=220:
+        len3000.add(sentence)
   
-  n_shards = 0
-  for i in range(0, len(sentences), args.max_sent):
-    with open("%s.%d" %(out_file, n_shards), 'w') as f:
-      for sent in sentences[i:i+args.max_sent]:
-        f.write(sent+'\n')
-    n_shards+=1
-  print("write %d files" % n_shards)
+  print(len(len60), len(len100), len(len200), len(len3000))
+
+  def write_shrads(sentences, dir_name):
+    sentences = list(sentences)
+    if not os.path.exists(dir_name):
+      os.makedirs(dir_name)
+
+    n_shards = 0
+    for i in range(0, len(sentences), args.max_sent):
+      filename = os.path.join(dir_name, "%s.%d" %(basename, n_shards))
+      with open(filename, 'w') as f:
+        for sent in sentences[i:i+args.max_sent]:
+          f.write(sent+'\n')
+      n_shards+=1
+    print("write %d files" % n_shards)
+  
+  write_shrads(len60, out_dir+"/len60")
+  write_shrads(len100, out_dir+"/len100")
+  write_shrads(len200, out_dir+"/len200")
+  write_shrads(len3000, out_dir+"/len3000")
+
   sys.stdout.flush()
+
+get_sentence_from_data("train.txt", "tmp_dir_train")
+get_sentence_from_data("test.txt", "tmp_dir_test")
+
+# extract sentences from train.txt
+# len: 60 100 200 3000
+# 334338 31632 2027 16 sentences
+# len60   3344 files 
+#           range(0,500) range(2000,3344) (386.06 wds/sec; 10.93 sents/sec). 12g 20th
+#           range(500,2000)               (287.55 wds/sec; 8.17 sents/sec).  24g 20th
+# len100  317 files 35g 20th    (149.06 wds/sec; 2.08 sents/sec)
+# len200  21 files  50g 10th    (25.93 wds/sec; 0.21 sents/sec)
+# len3000 1 files   50g 5th     (3.72 wds/sec; 0.02 sents/sec)     
+
+arr = ["$data_dir/train.%d" %i for i in range(0,21)]
+
+# extract sentences from test.txt
+# 55840 5487 365 15
+# len60   559 files range(0, 559) 6g 4th
+# len100  55 files                6g 4th  (80.93 wds/sec; 1.13 sents/sec)
+# len200  4 files                 35g 10th; 50g 10th (21.25 wds/sec; 0.17 sents/sec)
+# len3000 1 files  max len 225    50g 5th (5.06 wds/sec; 0.02 sents/sec)
+arr = ["$data_dir/test.%d" %i for i in range(0,4)]
+# " ".join(arr)
+
+
+re.sub(r'\\\*', ' ', 'i will \*') # replace '\*'
+
+
 
 
 def parse_with_states(sents_dir):
-  if args.job_idx == 0 and args.job_type=='train':
-    state_file = args.project_dir + "/tmp_parser/state.pkl"
-  else:
-    state_file = args.project_dir + "/tmp_parser/state.%s.pkl.%d" %(args.job_type, args.job_idx)
-
+  default_state_file = args.project_dir + "/tmp_parser/state.pkl"
+  with open(default_state_file, 'rb') as f:
+    state0 = pickle.load(f)
+  
+  state_file = args.project_dir + "/tmp_parser/state.%s.pkl.%d" %(args.job_type, args.job_idx)
   if os.path.exists(state_file):
     with open(state_file, 'rb') as f:
       state = pickle.load(f)
-    print(state)
   else:
     state = set()
+  
+  state.update(state0)
+  print(state)
 
   # parser_sh = args.project_dir+"/src/parse_tree/parser.sh"
-  parser_sh = args.project_dir+"/parser.sh"  
+  parser_path = os.environ['PWD']+"/"
+
+  parser_cmd = """java -mx8g \
+  -cp stanford-parser-full-2018-02-27/stanford-parser.jar:stanford-parser-full-2018-02-27/stanford-parser-3.9.1-models.jar \
+  edu.stanford.nlp.parser.lexparser.LexicalizedParser \
+  -nthreads 8 \
+   -maxLength 200\
+  -sentences newline \
+  -outputFormat "typedDependencies" \
+  edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz \
+  %s > %s
+  """
 
   for filename in os.listdir(sents_dir):
     type, idx = filename.split('.')
@@ -96,37 +146,13 @@ def parse_with_states(sents_dir):
       if filename not in state:
         in_path = os.path.join(sents_dir, filename)
         out_path = os.path.join(lex_dir, filename)
-        if os.system('bash %s %s %s'%(parser_sh, in_path, out_path)) == 0:
+        if os.system(parser_cmd%(in_path, out_path)) == 0:
           state.add(filename)
           with open(state_file, 'wb') as f:
             pickle.dump(state, f)
         else:
           exit()
-        
-    
   
-
-get_sentence_from_data(origin_train_file, train_sents_file)
-get_sentence_from_data(origin_test_file, test_sents_file)
-
-parse_with_states(sents_dir)
-
-# nohup python parse_dp_tree.py --job_type train --job_idx 1000 &
-# [0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000]
-
-# extract sentences from train.txt
-# write 5701 files
-# extract sentences from test.txt
-# write 1725 files
-
-
-
-
-
-
-
-
-
 
 def parse_and_save_fn(args):
   sentences, out_filename = args
