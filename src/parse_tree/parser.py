@@ -33,6 +33,7 @@ def clean_str(line):
   line = re.sub('\\\/', ' ', line) # remove '\/' in line
   line = re.sub(' {2,}', ' ', line)
   return line
+  # re.sub(r'\\\*', ' ', 'i will \*') # replace '\*'
  
 def get_sentence_from_data(in_file, out_dir):
   print("extract  sentences from %s"   % in_file)
@@ -103,7 +104,7 @@ arr = ["$data_dir/test.%d" %i for i in range(0,4)]
 # " ".join(arr)
 
 
-re.sub(r'\\\*', ' ', 'i will \*') # replace '\*'
+
 
 
 
