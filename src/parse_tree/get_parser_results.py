@@ -4,7 +4,7 @@ import re
 regex = re.compile("\((.+)-(\d+)'*, (.+)-(\d+)'*\)")
 
 def restore_sentence_from_tree(lines):
-  words = [0]*250
+  words = [0]*300
   n_words = 0
   for line in lines:
     if line != '\n':
@@ -24,58 +24,136 @@ def restore_sentence_from_tree(lines):
   for w in words[:n_words]:
     if w != 0:
       tmp.append(w)
-  return " ".join(tmp)+'\n'
+  s = " ".join(tmp)
+  s = re.sub(" _ ", "_", s)
+  s = re.sub("\d", ' ', s)
+  s = re.sub("[':&`_\.,!?=]", " ", s)
+  s = re.sub("-", " ", s)
+  s = re.sub(" ", " ", s)#'\xa0'
+  s = re.sub("LRB|RRB", " ", s)
+
+  s = re.sub("am|pm|an|to", ' ', s)
+  s = re.sub(r'\\\*', ' ', s) # replace '\*'
+  s = re.sub(' {2,}', ' ', s)
+  s = s.strip()
+
+  return s+'\n'
+
+def is_tree_of(tree, txt, keys):
+  # txt = txt.split()
+
+  tree = tree.split()
+  for w in keys:
+    if w not in tree:
+      return False
+
+  for w in tree:
+    if w not in txt:
+      return False
+  return True
+
+def clean_str(line):
+  line = line.strip()
+  line = re.sub("[\(\):?!;\-'&`_\.,=]", ' ', line)
+  line = re.sub("\.\.\.", ' ', line)
+  line = re.sub("''|--", ' ', line)
+  line = re.sub("\d", ' ', line)
+  line = re.sub("am|pm|an|to", ' ', line)
+  line = re.sub('\\\/', ' ', line) # remove '\/' in line
+  line = re.sub(r'\\\*', ' ', line) # replace '\*'
+  line = re.sub(' {2,}', ' ', line)
+  line = line.strip()
+  return line+'\n'
 
 def get_results(txt_dirs, stp_dirs, file_type):
-  all_txt = []
-  all_stp = []
-  for i in range(len(txt_dirs)):
-    txt_dir = txt_dirs[i]
-    stp_dir = stp_dirs[i]
-    print(txt_dir)
-    zip_files = zip(sorted(os.listdir(txt_dir)), 
-                sorted(os.listdir(stp_dir))
-                )
-  
-    for txt_file, stp_file in zip_files:
-      assert txt_file == stp_file[:-4]
+  all_txt = set()
+  all_stp = {}
+
+  for txt_dir in txt_dirs:
+    for txt_file in os.listdir(txt_dir):
       with open(os.path.join(txt_dir, txt_file)) as f:
         sentences = f.readlines()
+        all_txt.update(sentences)
+        # all_txt.extend([clean_str(sent) for sent in sentences])
+  for stp_dir in stp_dirs:
+    for stp_file in os.listdir(stp_dir):
       with open(os.path.join(stp_dir, stp_file)) as f:
-        stp = []
         tmp = []
         for line in f:
           tmp.append(line)
           if line == '\n':
             # stp.append("".join(tmp))
-            stp.append(restore_sentence_from_tree(tmp))
+            s = restore_sentence_from_tree(tmp)
+            all_stp[s] = "".join(tmp)
             tmp.clear()
+  
+  # all_txt = sorted(list(set(all_txt)))
+  # all_stp = sorted(list(set(all_stp)))
 
-      assert len(sentences) == len(stp)
-      all_txt.extend(sentences)
-      all_stp.extend(stp)
-  all_txt.sort()
-  all_stp.sort()
-  with open('%s.stp.txt'%file_type, 'w') as f:
-    for line in all_txt:
-      f.write(line)
-  with open('%s.stp'%file_type, 'w') as f:
-    for line in all_stp:
-      f.write(line)
+  # all_txt.sort()
+  # all_stp.sort()
+
+  # n = len(all_txt)
+  # align = [-1]*n
+  # for i in range(n):
+  #   line = all_txt[i]
+  #   keys = [w for w in line.split() if '_' in w]
+  #   for j  in range(n):
+  #     if is_tree_of(all_stp[j], line, keys):
+  #       align[i] = j
+  #       break
+  f_txt = open('%s.stp.txt'%file_type, 'w')
+  f_stp = open('%s.stp'%file_type, 'w')
+  f_txt_todo = open('%s.todo'%file_type, 'w')
+  for txt in all_txt:
+    s = clean_str(txt)
+    if s in all_stp:
+      f_txt.write(txt)
+      f_stp.write(all_stp[s])
+    else:
+      f_txt_todo.write(txt)
 
 
-get_results(
-  ['tmp_test/len200'],
-  ['tmp_test/len200_lex'],
-  'test')
+
+  # with  as f:
+  #   for line in all_txt:
+  #     f.write(line)
+  # with  as f:
+  #   for line in all_stp:
+  #     f.write(line)
+
+
+  # stp_set = set(all_stp)
+  # txt_set = set(all_txt)
+  # with open('%s.stp.txt'%file_type, 'w') as f:
+  #   for line in sorted(list(txt_set.difference(stp_set))):
+  #     f.write(line)
+  # with open('%s.stp'%file_type, 'w') as f:
+  #   for line in sorted(stp_set.difference(txt_set)):
+  #     f.write(line)
+    
+
+
+
+
+  #   for idx in align:
+  #     if idx != -1:
+  #       f.write(all_stp[idx])
+  #     else:
+  #       f.write('-1\n')
+  # for i in range(n):
+  #   if i not in set(align):
+  #     print(all_stp[i])
+
+
+
+
 # get_results(
 #   ['tmp_test/len60', 'tmp_test/len100','tmp_test/len200','tmp_test/len3000'],
 #   ['tmp_test/len60_lex', 'tmp_test/len100_lex','tmp_test/len200_lex','tmp_test/len3000_lex'],
 #   'test')
 
-# get_results(
-#   ['tmp_train/len60', 'tmp_train/len100','tmp_train/len200','tmp_train/len3000'],
-#   ['tmp_train/len60_lex', 'tmp_train/len100_lex','tmp_train/len200_lex','tmp_train/len3000_lex'],
-#   'train')
-
-"(?<=[(])[^()]+\.[^()]+(?=[)])"
+get_results(
+  ['tmp_train/len60', 'tmp_train/len100','tmp_train/len200','tmp_train/len3000'],
+  ['tmp_train/len60_lex', 'tmp_train/len100_lex','tmp_train/len200_lex','tmp_train/len3000_lex'],
+  'train')
