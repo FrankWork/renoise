@@ -66,26 +66,26 @@ def clean_str(line):
   return line+'\n'
 
 def get_results(txt_dirs, stp_dirs, file_type):
-  all_txt = []
-  all_stp = []
+  all_txt = set()
+  all_stp = {}
 
   for txt_dir in txt_dirs:
     for txt_file in os.listdir(txt_dir):
       with open(os.path.join(txt_dir, txt_file)) as f:
         sentences = f.readlines()
-        all_txt.extend([clean_str(sent) for sent in sentences])
+        all_txt.update(sentences)
+        # all_txt.extend([clean_str(sent) for sent in sentences])
   for stp_dir in stp_dirs:
     for stp_file in os.listdir(stp_dir):
       with open(os.path.join(stp_dir, stp_file)) as f:
-        stp = []
         tmp = []
         for line in f:
           tmp.append(line)
           if line == '\n':
             # stp.append("".join(tmp))
-            stp.append(restore_sentence_from_tree(tmp))
+            s = restore_sentence_from_tree(tmp)
+            all_stp[s] = "".join(tmp)
             tmp.clear()
-        all_stp.extend(stp)
   
   # all_txt = sorted(list(set(all_txt)))
   # all_stp = sorted(list(set(all_stp)))
@@ -102,24 +102,37 @@ def get_results(txt_dirs, stp_dirs, file_type):
   #     if is_tree_of(all_stp[j], line, keys):
   #       align[i] = j
   #       break
+  f_txt = open('%s.stp.txt'%file_type, 'w')
+  f_stp = open('%s.stp'%file_type, 'w')
+  f_txt_todo = open('%s.todo'%file_type, 'w')
+  for txt in all_txt:
+    s = clean_str(txt)
+    if s in all_stp:
+      f_txt.write(txt)
+      f_stp.write(all_stp[s])
+    else:
+      f_txt_todo.write(txt)
 
 
-  stp_set = set(all_stp)
-  txt_set = set(all_txt)
-  with open('%s.stp.txt'%file_type, 'w') as f:
-    for line in sorted(list(txt_set.difference(stp_set))):
-      f.write(line)
-  with open('%s.stp'%file_type, 'w') as f:
-    for line in sorted(stp_set.difference(txt_set)):
-      f.write(line)
-    
 
-  # with open('%s.stp.txt'%file_type, 'w') as f:
+  # with  as f:
   #   for line in all_txt:
   #     f.write(line)
-  # with open('%s.stp'%file_type, 'w') as f:
+  # with  as f:
   #   for line in all_stp:
   #     f.write(line)
+
+
+  # stp_set = set(all_stp)
+  # txt_set = set(all_txt)
+  # with open('%s.stp.txt'%file_type, 'w') as f:
+  #   for line in sorted(list(txt_set.difference(stp_set))):
+  #     f.write(line)
+  # with open('%s.stp'%file_type, 'w') as f:
+  #   for line in sorted(stp_set.difference(txt_set)):
+  #     f.write(line)
+    
+
 
 
 
