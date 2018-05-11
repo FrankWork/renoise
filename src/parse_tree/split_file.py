@@ -36,7 +36,7 @@ def write_shrads(sentences, dir_name):
 write_shrads(txt70, "len70")
 write_shrads(txt200, "len200")
 
-# len 70: 569 files 35g 20th
+# len 70: 569 files 56873 sentences 35g 20th (462.32 wds/sec; 13.86 sents/sec
 arr = ["$data_dir/txt.%d" %i for i in range(0,569)]
-# len 200: 1 files  41 lines 50g 10th  (25.54 wds/sec; 0.25 sents/sec).
+# len 200: 1  files  41   sentences 50g 10th (25.54 wds/sec; 0.25 sents/sec).
 

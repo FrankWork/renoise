@@ -6,3 +6,6 @@ __pycache__
 labels.npy
 prob.npy
 saved_models/
+test.stp.align
+train.stp.align
+
