@@ -1,28 +1,77 @@
 import re
 
-regex = re.compile("\((.+)-(\d+)'*, (.+)-(\d+)'*\)")
+regex = re.compile("([^\()]+)\((.+)-(\d+)'*, (.+)-(\d+)'*\)")
 
-def restore_sentence_from_tree(lines):
-  words = [0]*300
-  n_words = 0
-  for line in lines:
+def get_lex_tree_from_str(tree_str):
+  nodes = []
+  for line in tree_str.split('\n'):
     if line != '\n' and line != "":
       m=regex.search(line)
       if not m:
-        print(line)
-        exit()
-      w1, idx1, w2, idx2 = m.groups()
-      idx1 = int(idx1)
-      idx2 = int(idx2)
-      n_words = max(idx1, idx2, n_words)
-      if idx1 > 0:
-        words[idx1-1] = w1
-      if idx2 > 0:
-        words[idx2-1] = w2
-  tmp = []
-  for w in words[:n_words]:
-    if w != 0:
-      tmp.append(w)
+        raise Exception('can not parse %s' % line)
+      tag, w1, idx1, w2, idx2 = m.groups()
+      idx1 = int(idx1)-1
+      idx2 = int(idx2)-1
+      nodes.append( (tag, w1, idx1, w2, idx2) )
+  return nodes
+
+def restore_sentence_from_tree(nodes):
+  words = ['<unk>']*300
+  n_words = 0
+  for dep in nodes:
+    tag, w1, idx1, w2, idx2 = dep
+    n_words = max(idx1, idx2, n_words)
+    words[idx1]=w1
+    words[idx2]=w2
+  
+  # tmp = []
+  # for w in words[:n_words+1]:
+  #   if w != 0:
+  #     tmp.append(w)
+  # s = " ".join(tmp)
+  return words[:n_words+1]
+
+def get_children(tokens, nodes):
+  children = [[] for _ in range(len(tokens))]
+  for dep in nodes:
+    tag, w1, idx1, w2, idx2 = dep
+    if w1=='ROOT':
+      continue
+
+    for w in w1.split('_'):
+      aligned = False
+      for idx, tok in enumerate(tokens):
+        if tok == w and abs(idx-idx1)<10:
+          children[idx].extend(w2.split('_'))
+          aligned=True
+      # if not aligned:
+      #   # print(w1, w2)
+      #   if w1 not in  ['no']:
+      #     raise Exception('not aligned %s: %s' % (w1, " ".join(tokens)))
+
+    # if not children[idx1]:
+    #   children[idx1] = (w1, [])
+    # words[idx1]=w1
+    # words[idx2]=w2
+  for i in range(len(tokens)):
+    print("%s :\t %s" % (tokens[i], " ".join(children[i])))
+  
+  print()
+
+def clean_str(line):
+  line = line.lower()
+  line = re.sub('-lrb-', ' ', line)
+  line = re.sub('-rrb-', ' ', line)
+  line = re.sub("''", ' ', line)
+  line = re.sub("_", ' ', line)
+  line = re.sub('###end###', ' ', line)
+  line = re.sub('\\\/', ' ', line) # remove '\/' in line
+  line = re.sub(r'\\\*', ' ', line) # replace '\*'
+  line = re.sub(' {2,}', ' ', line)
+  line = line.strip()
+  return line
+
+def clean_tree(lines):
   s = " ".join(tmp)
   s = re.sub(" _ ", "_", s)
   s = re.sub("[':&`_\.,!?=]", " ", s)
@@ -36,35 +85,47 @@ def restore_sentence_from_tree(lines):
 
   return s+'\n'
 
-txt  = "the occasion was suitably exceptional : " +\
-"a reunion of the 1970s-era sam rivers trio , " +\
-"with dave_holland on bass and barry_altschul on drums ."
+
+stp_f = open("test.stp.align")
+with open("tmp_test.txt") as f:
+  for i, line in enumerate(f):
+    # if i > 20:
+    #   break
+    parts = line.strip().split('\t')
+    
+    e1_kb, e2_kb = parts[0], parts[1]
+    e1_str, e2_str, relation = parts[2], parts[3], parts[4]
+    tokens = clean_str(parts[5]).split()
+
+    tree_str = ""
+    line = stp_f.readline()
+    tree_str += line
+    while True:
+      line = stp_f.readline()
+      tree_str += line
+      if line == '\n':
+        break
+    
+    nodes = get_lex_tree_from_str(tree_str)
+    get_children(tokens, nodes)
 
 
-lex = ""+\
-"det(occasion-2, the-1)\n"+\
-"nsubj(exceptional-5, occasion-2)\n"+\
-"cop(exceptional-5, was-3)\n"+\
-"advmod(exceptional-5, suitably-4)\n"+\
-"root(ROOT-0, exceptional-5)\n"+\
-"det(reunion-8, a-7)\n"+\
-"dep(exceptional-5, reunion-8)\n"+\
-"case(trio-14, of-9)\n"+\
-"det(trio-14, the-10)\n"+\
-"amod(trio-14, 1970s-era-11)\n"+\
-"compound(trio-14, sam-12)\n"+\
-"compound(trio-14, rivers-13)\n"+\
-"nmod:of(reunion-8, trio-14)\n"+\
-"case(dave_holland-17, with-16)\n"+\
-"advcl(exceptional-5, dave_holland-17)\n"+\
-"case(bass-19, on-18)\n"+\
-"nmod:on(dave_holland-17, bass-19)\n"+\
-"cc(dave_holland-17, and-20)\n"+\
-"advcl(exceptional-5, barry_altschul-21)\n"+\
-"conj:and(dave_holland-17, barry_altschul-21)\n"+\
-"case(drums-23, on-22)\n"+\
-"nmod:on(barry_altschul-21, drums-23)\n"+\
-"\n"
-s = restore_sentence_from_tree(lex.split('\n'))
-print(s)
+
+# words = restore_sentence_from_tree(nodes)
+# print(" ".join(words))
+
+
+
+# s = restore_sentence_from_tree(lex.split('\n'))
+# print(s)
 # print(txt)
+
+# stp_lex = []
+# tmp = []
+# with open("test.stp.align") as f:
+#   for line in f:
+#     tmp.append(line)
+#     if line == '\n':
+#       stp_lex.append("".join(tmp))
+#       tmp.clear()
+# print(len(stp_lex))

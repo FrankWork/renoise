@@ -175,7 +175,6 @@ def clean_str(line):
   line = re.sub('-rrb-', ' ', line)
   line = re.sub("''", ' ', line)
   line = re.sub('\\\/', ' ', line) # remove '\/' in line
-  line = re.sub('-rrb-', ' ', line)
   line = re.sub(' {2,}', ' ', line)
   return line
 
