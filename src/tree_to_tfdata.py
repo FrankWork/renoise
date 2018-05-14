@@ -147,17 +147,19 @@ def write_records(args):
       kb_e1_id, kb_e2_id, label = bag_key
       bag_size = len(bag_value)
       tokens_list = []
-      # dist1_list = []
-      # dist2_list = []
+      dist1_list = []
+      dist2_list = []
       seq_len_list = []
       for value in bag_value:
-        # tokens, dist1, dist2, length = value
-        tokens, children, length = value
+        tokens, children, dist1, dist2, length = value
         
         tokens_list.append(int64_feature(tokens))
-        # dist1_list.append(int64_feature(dist1))
-        # dist2_list.append(int64_feature(dist2))
+        dist1_list.append(int64_feature(dist1))
+        dist2_list.append(int64_feature(dist2))
         seq_len_list.append(int64_feature([length]))
+        children = np.reshape(children, [-1])
+        children_list.append(int64_feature(children))
+
 
       example = sequence_example(
                   context=features({
@@ -168,8 +170,9 @@ def write_records(args):
                   }),
                   feature_lists=feature_lists({
                       "tokens": feature_list(tokens_list),
-                      # "e1_dist": feature_list(dist1_list),
-                      # "e2_dist": feature_list(dist2_list),
+                      "children": feature_list(children_list),
+                      "e1_dist": feature_list(dist1_list),
+                      "e2_dist": feature_list(dist2_list),
                       "seq_len": feature_list(seq_len_list),
                   }))
       writer.write(example.SerializeToString())
@@ -190,6 +193,9 @@ def clean_str(line):
 def get_lex_tree_from_str(tree_str):
   nodes = []
   for line in tree_str.split('\n'):
+    if line=='None':
+      return None
+
     if line != '\n' and line != "":
       m=regex.search(line)
       if not m:
@@ -226,6 +232,19 @@ def get_children(tokens, nodes):
     # print("%s :\t %s" % (tokens[i], " ".join(children[i])))
   return children
 
+def find_entity_idx(txt_toks, ent_toks, default_idx):
+  n = len(ent_toks)
+  m = len(txt_toks)
+  idx = 0
+  for i in range(m):
+    if txt_toks[i] == ent_toks[idx]:
+      idx+=1
+      if idx==n:
+        return i-idx+1
+    else:
+      idx=0
+  return default_idx
+
 def convert_data(txt_file, tree_file, record_file, 
                   kb_entity2id, relation2id, vocab2id, shard=True):
   data = {}
@@ -260,6 +279,16 @@ def convert_data(txt_file, tree_file, record_file,
         continue
       children = get_children(tokens, nodes)
 
+      # distance features
+      
+      e1_tokens = clean_str(e1_str).split()
+      e2_tokens = clean_str(e2_str).split() 
+      e1_idx = find_entity_idx(tokens, e1_tokens, 0)
+      e2_idx = find_entity_idx(tokens, e2_tokens, length)
+      
+      dist1 = [distance_feature(i-e1_idx) for i in range(length)]
+      dist2 = [distance_feature(i-e2_idx) for i in range(length)]
+
       # word to idx
       tokens = [vocab2id[x] if x in vocab2id else vocab2id['UNK'] 
                      for x in tokens]
@@ -267,20 +296,8 @@ def convert_data(txt_file, tree_file, record_file,
         children[i] = [vocab2id[x] if x in vocab2id else vocab2id['UNK'] 
                      for x in children[i]]
 
-      # distance features
-      e1_idx, e2_idx = 0, length
-      for idx, tok in enumerate(sentence):
-        if tok==e1_str:
-          e1_idx=idx
-        if tok==e2_str:
-          e2_idx=idx
-      
-      dist1 = [distance_feature(i-e1_idx) for i in range(length)]
-      dist2 = [distance_feature(i-e2_idx) for i in range(length)]
-
       bag_key = (e1_str, e2_str, label) #e1_str+'||'+e2_str+'||'+relation
-      # bag_value = (tokens, dist1, dist2, length)
-      bag_value = (tokens, children, length)
+      bag_value = (tokens, children, dist1, dist2, length)
       if bag_key not in data:
         data[bag_key]=[]
       data[bag_key].append(bag_value)
@@ -326,10 +343,12 @@ def main(_):
   relations, relation2id = load_relation()
   vocab,     vocab2id    = load_vocab()
   entities,  entity2id   = load_kb_entities()
-  # convert_data(os.path.join(FLAGS.data_dir, FLAGS.txt_train_file),
-  #              os.path.join(FLAGS.out_dir, FLAGS.train_records),
-  #              entity2id, relation2id, vocab2id)
+  convert_data(os.path.join(FLAGS.data_dir, FLAGS.txt_train_file),
+               os.path.join(FLAGS.data_dir, "train.stp.align"),
+               os.path.join(FLAGS.out_dir, FLAGS.train_records),
+               entity2id, relation2id, vocab2id)
   convert_data(os.path.join(FLAGS.data_dir, FLAGS.txt_test_file),
+               os.path.join(FLAGS.data_dir, "test.stp.align"),
                os.path.join(FLAGS.out_dir, FLAGS.test_records),
                entity2id, relation2id, vocab2id, shard=False)
 
