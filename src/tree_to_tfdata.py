@@ -266,15 +266,17 @@ def convert_data(txt_file, tree_file, record_file,
       for i in range(len(children)):
         children[i] = [vocab2id[x] if x in vocab2id else vocab2id['UNK'] 
                      for x in children[i]]
-      # e1_idx, e2_idx = 0, length
-      # for idx, tok in enumerate(sentence):
-      #   if tok==e1_str:
-      #     e1_idx=idx
-      #   if tok==e2_str:
-      #     e2_idx=idx
+
+      # distance features
+      e1_idx, e2_idx = 0, length
+      for idx, tok in enumerate(sentence):
+        if tok==e1_str:
+          e1_idx=idx
+        if tok==e2_str:
+          e2_idx=idx
       
-      # dist1 = [distance_feature(i-e1_idx) for i in range(length)]
-      # dist2 = [distance_feature(i-e2_idx) for i in range(length)]
+      dist1 = [distance_feature(i-e1_idx) for i in range(length)]
+      dist2 = [distance_feature(i-e2_idx) for i in range(length)]
 
       bag_key = (e1_str, e2_str, label) #e1_str+'||'+e2_str+'||'+relation
       # bag_value = (tokens, dist1, dist2, length)
