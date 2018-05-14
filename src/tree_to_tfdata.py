@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 import re
 import multiprocessing
-from functools import partial
+import pickle
 
 flags = tf.app.flags
 
@@ -139,44 +139,6 @@ def load_kb_entities():
 
   return entities, entity2id
 
-def write_records(args):
-  file, bags = args
-
-  with tf.python_io.TFRecordWriter(file) as writer:
-    for bag_key, bag_value in bags:
-      kb_e1_id, kb_e2_id, label = bag_key
-      bag_size = len(bag_value)
-      tokens_list = []
-      dist1_list = []
-      dist2_list = []
-      seq_len_list = []
-      for value in bag_value:
-        tokens, children, dist1, dist2, length = value
-        
-        tokens_list.append(int64_feature(tokens))
-        dist1_list.append(int64_feature(dist1))
-        dist2_list.append(int64_feature(dist2))
-        seq_len_list.append(int64_feature([length]))
-        children = np.reshape(children, [-1])
-        children_list.append(int64_feature(children))
-
-
-      example = sequence_example(
-                  context=features({
-                      'e1': int64_feature([0]),
-                      'e2': int64_feature([0]),
-                      'label': int64_feature([label]),
-                      'bag_size': int64_feature([bag_size])
-                  }),
-                  feature_lists=feature_lists({
-                      "tokens": feature_list(tokens_list),
-                      "children": feature_list(children_list),
-                      "e1_dist": feature_list(dist1_list),
-                      "e2_dist": feature_list(dist2_list),
-                      "seq_len": feature_list(seq_len_list),
-                  }))
-      writer.write(example.SerializeToString())
-
 def clean_str(line):
   line = line.lower()
   line = re.sub('-lrb-', ' ', line)
@@ -245,6 +207,41 @@ def find_entity_idx(txt_toks, ent_toks, default_idx):
       idx=0
   return default_idx
 
+def write_records(bag_key, bag_value, writer):
+  kb_e1_id, kb_e2_id, label = bag_key
+  bag_size = len(bag_value)
+  tokens_list = []
+  dist1_list = []
+  dist2_list = []
+  children_list = []
+  seq_len_list = []
+  for value in bag_value:
+    tokens, children, dist1, dist2, length = value
+    
+    tokens_list.append(int64_feature(tokens))
+    dist1_list.append(int64_feature(dist1))
+    dist2_list.append(int64_feature(dist2))
+    seq_len_list.append(int64_feature([length]))
+    children = np.reshape(children, [-1])
+    children_list.append(int64_feature(children))
+
+
+  example = sequence_example(
+                  context=features({
+                      'e1': int64_feature([0]),
+                      'e2': int64_feature([0]),
+                      'label': int64_feature([label]),
+                      'bag_size': int64_feature([bag_size])
+                  }),
+                  feature_lists=feature_lists({
+                      "tokens": feature_list(tokens_list),
+                      "children": feature_list(children_list),
+                      "e1_dist": feature_list(dist1_list),
+                      "e2_dist": feature_list(dist2_list),
+                      "seq_len": feature_list(seq_len_list),
+                  }))
+  writer.write(example.SerializeToString())
+
 def convert_data(txt_file, tree_file, record_file, 
                   kb_entity2id, relation2id, vocab2id, shard=True):
   data = {}
@@ -303,34 +300,18 @@ def convert_data(txt_file, tree_file, record_file,
       data[bag_key].append(bag_value)
   stp_f.close()
 
-  # shard data and convert to tf records data asyncly
-  if shard:
-    bags_shard = [list() for i in range(FLAGS.num_threads)]
-    j=0
-    for key in data:
-      # slice a big bag into small bags
-      arr = data[key]
-      for i in range(0, len(arr), FLAGS.max_bag_size):
-        bags_shard[j%FLAGS.num_threads].append( (key, arr[i:i+FLAGS.max_bag_size]) )
-        j+=1
-    del data
-
-    print("write records file ")
-    records_files = [record_file+'.%d'%i for i in range(FLAGS.num_threads)]
-    pool = multiprocessing.Pool(FLAGS.num_threads)
-    try:
-        pool.map_async(write_records, zip(records_files, bags_shard)).get(999999)
-        pool.close()
-        pool.join()
-    except KeyboardInterrupt:
-        pool.terminate()
-  else:
-    bags = []
-    for key in data:
-      bags.append( (key, data[key]) )
-    del data
-    print("write records file ")
-    write_records( (record_file, bags) )
+  # shard data and convert to tf records data
+  print("write records file ")
+  with tf.python_io.TFRecordWriter(record_file) as writer:
+    if shard:
+      for key in data:
+        # slice a big bag into small bags
+        arr = data[key]
+        for i in range(0, len(arr), FLAGS.max_bag_size):
+          write_records(key, arr[i:i+FLAGS.max_bag_size], writer)
+    else:
+      for key in data:
+        write_records(key, data[key], writer)
 
 def main(_):
   if not os.path.exists(FLAGS.out_dir):
