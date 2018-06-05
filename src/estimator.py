@@ -16,12 +16,15 @@ flags.DEFINE_string("vocab_file", "vocab.txt", "")
 flags.DEFINE_string("kb_entity_embed_file", "kb_entity_embed.npy", "")
 flags.DEFINE_string("train_records", "train.records","")
 flags.DEFINE_string("test_records", "test.records","")
+flags.DEFINE_string("gpu", '0', "")
+flags.DEFINE_string("model_dir", 'model-cnn', "")
 
 flags.DEFINE_integer("num_threads", 10, "")
 flags.DEFINE_integer("batch_size", 100, "")
 flags.DEFINE_integer("max_len", 220, "")
-flags.DEFINE_integer("epochs", 1, "")
+flags.DEFINE_integer("epochs", 3, "")
 flags.DEFINE_integer("log_freq", 50, "")
+
 
 FLAGS = flags.FLAGS
 
@@ -234,6 +237,8 @@ def my_model(features, labels, mode, params):
                 training_hooks = [logging_hook])
 
 def main(_):
+  os.environ['CUDA_VISIBLE_DEVICES'] = FLAGS.gpu
+
   if not os.path.exists(FLAGS.out_dir):
     os.makedirs(FLAGS.out_dir)
   
@@ -241,7 +246,7 @@ def main(_):
   params = get_params()
   classifier = tf.estimator.Estimator(
         model_fn=my_model,
-        model_dir="saved_models/model-cnn/",
+        model_dir="saved_models/%s" % FLAGS.model_dir,
         params=params)
   classifier.train(input_fn=train_input_fn)
 

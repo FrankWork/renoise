@@ -32,31 +32,31 @@ class CNNModel(object):
       inputs = tf.concat([tokens, pos1, pos2], 2)
       inputs = tf.layers.dropout(inputs, rate=0.2, training=self.training)
 
-    with tf.name_scope('cnn-encoder'):
-      conv = tf.layers.conv1d(inputs, num_filters, kernel_size,
-              activation=tf.nn.relu, kernel_initializer=xavier, padding='same')
-      sentence_vec = tf.reduce_max(conv, axis=1)
-      # sentence_vec = tf.layers.dropout(pool_max, training=self.training)
+    # with tf.name_scope('cnn-encoder'):
+    #   conv = tf.layers.conv1d(inputs, num_filters, kernel_size,
+    #           activation=tf.nn.relu, kernel_initializer=xavier, padding='same')
+    #   sentence_vec = tf.reduce_max(conv, axis=1)
+    #   # sentence_vec = tf.layers.dropout(pool_max, training=self.training)
     
-    # with tf.name_scope('rnn-encoder'):
-    #   cell_forward = tf.nn.rnn_cell.GRUCell(gru_size)
-    #   cell_backward = tf.nn.rnn_cell.GRUCell(gru_size)
+    with tf.name_scope('rnn-encoder'):
+      cell_forward = tf.nn.rnn_cell.GRUCell(gru_size)
+      cell_backward = tf.nn.rnn_cell.GRUCell(gru_size)
 
-    #   if training:
-    #     cell_forward = tf.nn.rnn_cell.DropoutWrapper(
-    #           cell_forward, output_keep_prob=keep_prob)
-    #     cell_backward = tf.nn.rnn_cell.DropoutWrapper(
-    #           cell_backward, output_keep_prob=keep_prob)
+      if training:
+        cell_forward = tf.nn.rnn_cell.DropoutWrapper(
+              cell_forward, output_keep_prob=keep_prob)
+        cell_backward = tf.nn.rnn_cell.DropoutWrapper(
+              cell_backward, output_keep_prob=keep_prob)
       
-    #   outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell_forward, cell_backward, 
-    #                 inputs, sequence_length=seq_len, dtype=tf.float32)
-    #   output_h = tf.add(outputs[0],outputs[1]) # [b', n, d]
+      outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell_forward, cell_backward, 
+                    inputs, sequence_length=seq_len, dtype=tf.float32)
+      output_h = tf.add(outputs[0],outputs[1]) # [b', n, d]
 
-    #   with tf.name_scope('rnn_attention'):
-    #     alpha = tf.layers.dense(tf.nn.tanh(output_h), 1, use_bias=False) # b,n,1
-    #     alpha = tf.nn.softmax(alpha, axis=1)
-    #     sentence_vec = tf.matmul(alpha, output_h, transpose_a=True)
-    #     sentence_vec = tf.squeeze(sentence_vec)
+      with tf.name_scope('rnn_attention'):
+        alpha = tf.layers.dense(tf.nn.tanh(output_h), 1, use_bias=False) # b,n,1
+        alpha = tf.nn.softmax(alpha, axis=1)
+        sentence_vec = tf.matmul(alpha, output_h, transpose_a=True)
+        sentence_vec = tf.squeeze(sentence_vec, axis=1)
 
     with tf.name_scope("attention"):
       # the implementation of Lin et al 2016 comes from 

@@ -14,6 +14,8 @@ flags.DEFINE_string("kb_entities_file", "RE/entity2id.txt", "")
 flags.DEFINE_string("pre_train_kb_entity_embed_file", "pretrain/entity2vec.txt", "")
 flags.DEFINE_string("txt_train_file", "RE/train.txt", "")
 flags.DEFINE_string("txt_test_file", "RE/test.txt", "")
+flags.DEFINE_string("tree_train_file", "train.stp.align", "")
+flags.DEFINE_string("tree_test_file", "test.stp.align", "")
 
 flags.DEFINE_string("out_dir", "preprocess", "")
 flags.DEFINE_string("word_embed_file", "word_embed.npy", "")
@@ -325,11 +327,11 @@ def main(_):
   vocab,     vocab2id    = load_vocab()
   entities,  entity2id   = load_kb_entities()
   convert_data(os.path.join(FLAGS.data_dir, FLAGS.txt_train_file),
-               os.path.join(FLAGS.data_dir, "train.stp.align"),
+               os.path.join(FLAGS.data_dir, FLAGS.tree_train_file),
                os.path.join(FLAGS.out_dir, FLAGS.train_records),
                entity2id, relation2id, vocab2id)
   convert_data(os.path.join(FLAGS.data_dir, FLAGS.txt_test_file),
-               os.path.join(FLAGS.data_dir, "test.stp.align"),
+               os.path.join(FLAGS.data_dir, FLAGS.tree_test_file),
                os.path.join(FLAGS.out_dir, FLAGS.test_records),
                entity2id, relation2id, vocab2id, shard=False)
 
