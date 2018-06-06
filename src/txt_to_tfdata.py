@@ -147,13 +147,17 @@ def write_records(args):
       dist1_list = []
       dist2_list = []
       seq_len_list = []
+      e1_idx_list = []
+      e2_idx_list = []
       for value in bag_value:
-        tokens, dist1, dist2, length = value
+        tokens, dist1, dist2, e1_idx, e2_idx, length = value
         
         tokens_list.append(int64_feature(tokens))
         dist1_list.append(int64_feature(dist1))
         dist2_list.append(int64_feature(dist2))
         seq_len_list.append(int64_feature([length]))
+        e1_idx_list.append(int64_feature([e1_idx]))
+        e2_idx_list.append(int64_feature([e2_idx]))
 
       example = sequence_example(
                   context=features({
@@ -167,6 +171,8 @@ def write_records(args):
                       "e1_dist": feature_list(dist1_list),
                       "e2_dist": feature_list(dist2_list),
                       "seq_len": feature_list(seq_len_list),
+                      "e1_idx": feature_list(e1_idx_list),
+                      "e2_idx": feature_list(e2_idx_list),
                   }))
       writer.write(example.SerializeToString())
 
@@ -213,7 +219,7 @@ def convert_data(txt_file, record_file, kb_entity2id, relation2id, vocab2id, sha
       
 
       bag_key = (e1_str, e2_str, label) #e1_str+'||'+e2_str+'||'+relation
-      bag_value = (tokens, dist1, dist2, length)
+      bag_value = (tokens, dist1, dist2, e1_idx, e2_idx, length)
       if bag_key not in data:
         data[bag_key]=[]
       data[bag_key].append(bag_value)

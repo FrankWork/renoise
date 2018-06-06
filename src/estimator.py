@@ -83,6 +83,8 @@ def _parse_example(example_proto):
             "e1_dist": tf.VarLenFeature(dtype=tf.int64),
             "e2_dist": tf.VarLenFeature(dtype=tf.int64),
             "seq_len": tf.VarLenFeature(dtype=tf.int64),
+            "e1_idx": tf.VarLenFeature(dtype=tf.int64),
+            "e2_idx": tf.VarLenFeature(dtype=tf.int64),
             }
   context_parsed, sequence_parsed = tf.parse_single_sequence_example(
                                   serialized=example_proto,
@@ -101,11 +103,13 @@ def _parse_example(example_proto):
   e1_dist = sequence_parsed['e1_dist']
   e2_dist = sequence_parsed['e2_dist']
   seq_len = sequence_parsed['seq_len']
+  e1_idx = sequence_parsed['e1_idx']
+  e2_idx = sequence_parsed['e2_idx']
   
-  return e1, e2, label, bag_size, tokens, e1_dist, e2_dist, seq_len
+  return e1, e2, label, bag_size, tokens, e1_dist, e2_dist, seq_len, e1_idx, e2_idx
 
 def _parse_batch_sparse(*args):
-  e1, e2, labels, bag_size, tokens, e1_dist, e2_dist, seq_len=args
+  e1, e2, labels, bag_size, tokens, e1_dist, e2_dist, seq_len, e1_idx, e2_idx=args
 
   n_sent = tf.reduce_sum(bag_size)
   idx0 = tf.constant([], dtype=tf.int64)
@@ -135,8 +139,38 @@ def _parse_batch_sparse(*args):
   bag_idx = tf.scan(lambda a, x: a+x, tf.pad(bag_size, [[1,0]]))
   bag_idx = tf.cast(bag_idx, tf.int32)
 
-  features = e1,e2, bag_size, bag_idx, seq_len.values, tokens, e1_dist, e2_dist
+  pcnn_mask = get_pcnn_mask(seq_len.values, e1_idx.values, e2_idx.values)
+  
+  features = (e1,e2, bag_size, bag_idx, 
+              seq_len.values, pcnn_mask, 
+              tokens, e1_dist, e2_dist)
   return features, labels
+
+def get_pcnn_mask(length, idx0, idx1):
+  '''length, idx0, idx1: 1-d tensor'''
+  maxlen = tf.reduce_max(length)
+
+  range_row        = tf.expand_dims(tf.range(maxlen), 0) # 1, len
+  length_transpose = tf.expand_dims(length,           1) # batch, 1
+  idx0             = tf.expand_dims(idx0,             1) # batch, 1
+  idx1             = tf.expand_dims(idx1,             1) # batch, 1
+
+  # automatic broadcast
+  mask0 = tf.to_float(tf.less(range_row, idx0))          # batch, len
+
+  mask1 = tf.to_float(
+              tf.logical_and(
+                tf.greater_equal(range_row, idx0),
+                tf.less(range_row, idx1))
+              )
+  mask2 = tf.to_float(
+              tf.logical_and(
+                tf.greater_equal(range_row, idx1),
+                tf.less(range_row, length_transpose))
+              )
+  mask = tf.stack([mask0, mask1, mask2])# 3, batch, len
+  mask = tf.transpose(mask, [1, 2, 0])  # batch, len, 3
+  return mask
 
 def _input_fn(filenames, epochs, batch_size, shuffle=False):
   dataset = tf.data.TFRecordDataset(filenames)

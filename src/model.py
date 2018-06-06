@@ -2,7 +2,8 @@ import tensorflow as tf
 
 class CNNModel(object):
   def __init__(self, params, word2vec, features, labels, training=False):
-    e1, e2, bag_size, bag_idx, seq_len, tokens, e1_dist, e2_dist = features
+    e1, e2, bag_size, bag_idx, seq_len, pcnn_mask, tokens, e1_dist, e2_dist = features
+    
     xavier = tf.contrib.layers.xavier_initializer()
     
     self.params = params
@@ -36,14 +37,13 @@ class CNNModel(object):
       conv = tf.layers.conv1d(inputs, num_filters, kernel_size,
               activation=tf.nn.relu, kernel_initializer=xavier, padding='same')
       # sentence_vec = tf.reduce_max(conv, axis=1)
-      pcnn_mask = tf.expand_dims(tf.transpose(pcnn_mask, [0, 2, 1]), axis=1)  # [batch, 1, L, 3]
-      conv =  tf.expand_dims(tf.transpose(conv, [0, 2, 1]), axis=-1)  # [batch, feat, L, 1]
-      pcnn_pool = tf.reduce_max(conv * pcnn_mask, axis=2)  # [batch, feat, 3]
+      pcnn_mask = tf.expand_dims(pcnn_mask, axis=1, name='pcnn_mask')  # [batch, 1, L, 3]
+      conv4d =  tf.expand_dims(tf.transpose(conv, [0, 2, 1]), axis=-1, name='conv4d')  # [batch, feat, L, 1]
+      mask_conv = tf.multiply(conv4d, pcnn_mask, name='mask_conv')
+      pcnn_pool = tf.reduce_max(mask_conv, axis=2)  # [batch, feat, 3]
       sentence_vec = tf.reshape(pcnn_pool, [-1, num_filters * 3])
       sentence_vec = tf.layers.dropout(sentence_vec, training=self.training)
 
-      
-    
     # with tf.name_scope('rnn-encoder'):
     #   cell_forward = tf.nn.rnn_cell.GRUCell(gru_size)
     #   cell_backward = tf.nn.rnn_cell.GRUCell(gru_size)
@@ -67,29 +67,31 @@ class CNNModel(object):
     with tf.name_scope("attention"):
       # the implementation of Lin et al 2016 comes from 
       # https://github.com/thunlp/TensorFlow-NRE/blob/master/network.py
-      sen_a = tf.get_variable("attention_A", [num_filters], initializer=xavier)
-      sen_q = tf.get_variable("query", [num_filters, 1], initializer=xavier)
+      num_units = sentence_vec.get_shape().as_list()[-1]
+      sen_a = tf.get_variable("attention_A", [num_units], initializer=xavier)
+      sen_q = tf.get_variable("query", [num_units, 1], initializer=xavier)
 
       # selective attention model, use the weighted sum of all related the sentence vectors as bag representation
       n_bags = tf.shape(labels)[0]
       def fn(i):
-        with tf.name_scope('dynamic'):
-          sen_r = tf.tanh(sentence_vec[bag_idx[i]:bag_idx[i+1]]) # shape (n_sent,feat_size)
-          # sen_r = sentence_vec[bag_idx[i]:bag_idx[i+1]] # shape (n_sent,feat_size)
-        sen_alpha = tf.nn.softmax(
-                          tf.matmul(
-                            tf.multiply(sen_r, sen_a), sen_q, name='alpha_mul'), 
-                          axis=0,
-                          name='alpha') # (n_sent,1)
-        sen_s = tf.matmul(sen_alpha, sen_r, transpose_a=True, name='att_sum') #(1,feat_size)
-        return tf.squeeze(sen_s)
+        with tf.name_scope('debug'):
+          with tf.name_scope('dynamic'):
+            sen_r = tf.tanh(sentence_vec[bag_idx[i]:bag_idx[i+1]]) # shape (n_sent,feat_size)
+            # sen_r = sentence_vec[bag_idx[i]:bag_idx[i+1]] # shape (n_sent,feat_size)
+          sen_alpha = tf.nn.softmax(
+                            tf.matmul(
+                              tf.multiply(sen_r, sen_a), sen_q, name='alpha_mul'), 
+                            axis=0,
+                            name='alpha') # (n_sent,1)
+          sen_s = tf.matmul(sen_alpha, sen_r, transpose_a=True, name='att_sum') #(1,feat_size)
+          return tf.squeeze(sen_s)
       bag_vec = tf.map_fn(fn, tf.range(n_bags), dtype=tf.float32, 
                     parallel_iterations=50)
 
       bag_vec = tf.layers.dropout(bag_vec, training=self.training) # (n_bag, feat_size)
       self.bag_score = tf.layers.dense(bag_vec, num_rels)
       
-
+      
     with tf.name_scope("output"):
       self.total_loss = tf.contrib.layers.apply_regularization(regularizer=
           tf.contrib.layers.l2_regularizer(0.0001),weights_list=tf.trainable_variables())
