@@ -20,9 +20,9 @@ flags.DEFINE_string("gpu", '0', "")
 flags.DEFINE_string("model_dir", 'model-cnn', "")
 
 flags.DEFINE_integer("num_threads", 10, "")
-flags.DEFINE_integer("batch_size", 100, "")
+flags.DEFINE_integer("batch_size", 50, "")
 flags.DEFINE_integer("max_len", 220, "")
-flags.DEFINE_integer("epochs", 3, "")
+flags.DEFINE_integer("epochs", 5, "")# 10 15 20 25
 flags.DEFINE_integer("log_freq", 50, "")
 
 
@@ -203,8 +203,9 @@ class PatTopKHook(tf.train.SessionRunHook):
     idx = idx_prob[-500:][::-1]
     p500 = np.mean(one_hot_labels[idx])
 
-    tf.logging.info("p@100: %.3f p@200: %.3f p@500: %.3f" % (p100, p200, p500))
-    tf.logging.info(all_prob[-1][:5])
+    tf.logging.info("="* 40)
+    tf.logging.info("||p@100: %.3f p@200: %.3f p@500: %.3f" % (p100, p200, p500))
+    tf.logging.info("="* 40)
 
 
 def my_model(features, labels, mode, params):
@@ -248,10 +249,11 @@ def main(_):
         model_fn=my_model,
         model_dir="saved_models/%s" % FLAGS.model_dir,
         params=params)
-  classifier.train(input_fn=train_input_fn)
+  for i in range(5):
+    classifier.train(input_fn=train_input_fn)
 
-  eval_result = classifier.evaluate(input_fn=test_input_fn)
-  tf.logging.info('\nTest set accuracy: {accuracy:0.3f} {mask_accuracy:0.3f}\n'.format(**eval_result))
+    eval_result = classifier.evaluate(input_fn=test_input_fn)
+    tf.logging.info('\nTest set accuracy: {accuracy:0.3f} {mask_accuracy:0.3f}\n'.format(**eval_result))
   duration = time.time() - start_time
   tf.logging.info("duration: %.2f hours" % (duration/3600))
   # with tf.train.MonitoredTrainingSession() as sess:
