@@ -39,7 +39,7 @@ def features(d): return tf.train.Features(feature=d)
 def int64_feature(v): return feature(int64_list=tf.train.Int64List(value=v))
 def bytes_feature(v): return feature(bytes_list=tf.train.BytesList(value=v))
 def feature_list(l): return tf.train.FeatureList(feature=l)
-def feature_lists(d): return tf.train.FeatureLists(feature_list=d)
+def feature_lists(d): return tf.train.(feature_list=d)
 
 def distance_feature(x):
 	if x < -60:

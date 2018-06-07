@@ -36,12 +36,12 @@ class CNNModel(object):
     with tf.name_scope('cnn-encoder'):
       conv = tf.layers.conv1d(inputs, num_filters, kernel_size,
               activation=tf.nn.relu, kernel_initializer=xavier, padding='same')
-      # sentence_vec = tf.reduce_max(conv, axis=1)
-      pcnn_mask = tf.expand_dims(pcnn_mask, axis=1, name='pcnn_mask')  # [batch, 1, L, 3]
-      conv4d =  tf.expand_dims(tf.transpose(conv, [0, 2, 1]), axis=-1, name='conv4d')  # [batch, feat, L, 1]
-      mask_conv = tf.multiply(conv4d, pcnn_mask, name='mask_conv')
-      pcnn_pool = tf.reduce_max(mask_conv, axis=2)  # [batch, feat, 3]
-      sentence_vec = tf.reshape(pcnn_pool, [-1, num_filters * 3])
+      sentence_vec = tf.reduce_max(conv, axis=1)
+      # pcnn_mask = tf.expand_dims(pcnn_mask, axis=1, name='pcnn_mask')  # [batch, 1, L, 3]
+      # conv4d =  tf.expand_dims(tf.transpose(conv, [0, 2, 1]), axis=-1, name='conv4d')  # [batch, feat, L, 1]
+      # mask_conv = tf.multiply(conv4d, pcnn_mask, name='mask_conv')
+      # pcnn_pool = tf.reduce_max(mask_conv, axis=2)  # [batch, feat, 3]
+      # sentence_vec = tf.reshape(pcnn_pool, [-1, num_filters * 3])
       sentence_vec = tf.layers.dropout(sentence_vec, training=self.training)
 
     # with tf.name_scope('rnn-encoder'):
@@ -89,7 +89,7 @@ class CNNModel(object):
                     parallel_iterations=50)
 
       # bag_vec = tf.layers.dropout(bag_vec, training=self.training) # (n_bag, feat_size)
-      regularizer = tf.contrib.layers.l2_regularizer(scale=0.0001)
+      regularizer = None# tf.contrib.layers.l2_regularizer(scale=0.0001)
       self.bag_score = tf.layers.dense(bag_vec, num_rels, kernel_regularizer=regularizer)
       
       
@@ -98,7 +98,7 @@ class CNNModel(object):
                               tf.nn.softmax_cross_entropy_with_logits_v2(
                                   labels=tf.one_hot(labels, num_rels), 
                                   logits=self.bag_score))
-      self.total_loss += tf.losses.get_regularization_loss()
+      # self.total_loss += tf.losses.get_regularization_loss()
 
       self.prob = tf.nn.softmax(self.bag_score, axis=1)
       self.predictions = tf.argmax(self.bag_score, axis=1, name="predictions")
