@@ -31,7 +31,7 @@ class CNNModel(object):
         pos1 = tf.nn.embedding_lookup(pos1_embed, e1_dist)
         pos2 = tf.nn.embedding_lookup(pos2_embed, e2_dist)
       inputs = tf.concat([tokens, pos1, pos2], 2)
-      inputs = tf.layers.dropout(inputs, rate=0.2, training=self.training)
+      # inputs = tf.layers.dropout(inputs, rate=0.2, training=self.training)
 
     with tf.name_scope('cnn-encoder'):
       conv = tf.layers.conv1d(inputs, num_filters, kernel_size,
@@ -88,17 +88,17 @@ class CNNModel(object):
       bag_vec = tf.map_fn(fn, tf.range(n_bags), dtype=tf.float32, 
                     parallel_iterations=50)
 
-      bag_vec = tf.layers.dropout(bag_vec, training=self.training) # (n_bag, feat_size)
-      self.bag_score = tf.layers.dense(bag_vec, num_rels)
+      # bag_vec = tf.layers.dropout(bag_vec, training=self.training) # (n_bag, feat_size)
+      regularizer = tf.contrib.layers.l2_regularizer(scale=0.0001)
+      self.bag_score = tf.layers.dense(bag_vec, num_rels, kernel_regularizer=regularizer)
       
       
     with tf.name_scope("output"):
-      self.total_loss = tf.contrib.layers.apply_regularization(regularizer=
-          tf.contrib.layers.l2_regularizer(0.0001),weights_list=tf.trainable_variables())
-      self.total_loss += tf.reduce_mean(
+      self.total_loss = tf.reduce_mean(
                               tf.nn.softmax_cross_entropy_with_logits_v2(
                                   labels=tf.one_hot(labels, num_rels), 
                                   logits=self.bag_score))
+      self.total_loss += tf.losses.get_regularization_loss()
 
       self.prob = tf.nn.softmax(self.bag_score, axis=1)
       self.predictions = tf.argmax(self.bag_score, axis=1, name="predictions")

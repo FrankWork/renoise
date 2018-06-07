@@ -20,9 +20,9 @@ flags.DEFINE_string("gpu", '0', "")
 flags.DEFINE_string("model_dir", 'model-cnn', "")
 
 flags.DEFINE_integer("num_threads", 10, "")
-flags.DEFINE_integer("batch_size", 50, "")
+flags.DEFINE_integer("batch_size", 100, "")
 flags.DEFINE_integer("max_len", 220, "")
-flags.DEFINE_integer("epochs", 5, "")# 10 15 20 25
+flags.DEFINE_integer("epochs", 1, "")# 10 15 20 25
 flags.DEFINE_integer("log_freq", 50, "")
 
 
@@ -272,6 +272,11 @@ def my_model(features, labels, mode, params):
                 training_hooks = [logging_hook])
 
 def main(_):
+  tf.logging.set_verbosity(tf.logging.INFO)
+  log = logging.getLogger('tensorflow')
+  fh = logging.FileHandler('%s.log' % FLAGS.model_dir)
+  log.addHandler(fh)
+
   os.environ['CUDA_VISIBLE_DEVICES'] = FLAGS.gpu
 
   if not os.path.exists(FLAGS.out_dir):
@@ -283,9 +288,8 @@ def main(_):
         model_fn=my_model,
         model_dir="saved_models/%s" % FLAGS.model_dir,
         params=params)
-  for i in range(5):
+  for i in range(7):
     classifier.train(input_fn=train_input_fn)
-
     eval_result = classifier.evaluate(input_fn=test_input_fn)
     tf.logging.info('\nTest set accuracy: {accuracy:0.3f} {mask_accuracy:0.3f}\n'.format(**eval_result))
   duration = time.time() - start_time
@@ -297,8 +301,4 @@ def main(_):
     
 
 if __name__=='__main__':
-  tf.logging.set_verbosity(tf.logging.INFO)
-  log = logging.getLogger('tensorflow')
-  fh = logging.FileHandler('tmp.log')
-  log.addHandler(fh)
   tf.app.run()
