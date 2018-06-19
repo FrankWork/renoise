@@ -30,3 +30,9 @@ python parser.py --memory 40 --n_threads 24 \
      --out_dir lex \
      --parser_path stanford-parser-full-2018-02-27
 ```
+
+
+```bash
+python get_parser_results.py
+python align_txt.py
+```

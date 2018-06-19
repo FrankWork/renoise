@@ -3,27 +3,26 @@ import os
 
 def clean_str(line):
   line = line.lower()
-  line = re.sub('-lrb-', '(', line)
-  line = re.sub('-rrb-', ')', line)
-  line = re.sub("''", ' ', line)
-  line = re.sub("_", ' ', line)
+  line = re.sub('-lrb-', ' ', line)
+  line = re.sub('-rrb-', ' ', line)
+  line = re.sub("[&'-\._]", ' ', line)
   line = re.sub('###end###', ' ', line)
-  line = re.sub('\\\/', ' ', line) # remove '\/' in line
+  line = re.sub('\\\/', ' ', line)  # remove '\/'
+  line = re.sub(r'\\\*', ' ', line) # remove '\*'
   line = re.sub(' {2,}', ' ', line)
   line = line.strip()
   return line
 
 def get_stp_map():
   stp_txt = []
-  for file in ['train.stp.txt', 'test.stp.txt', 'todo.stp.txt']:#
+  for file in ['train.uniq', 'test.uniq']:
     with open(file) as f:
       for line in f:
-        line = re.sub("_", ' ', line)
         line = line.strip()
         stp_txt.append(line)
 
   stp_lex = []
-  for file in ['train.stp', 'test.stp', 'todo.stp']:#
+  for file in ['train.uniq.stp', 'test.uniq.stp']:
     tmp = []
     with open(file) as f:
       for line in f:
@@ -45,7 +44,6 @@ stp_map = get_stp_map()
 
 def align(in_file, out_file):
   of = open(out_file, 'w')
-  # orig_set = set()
   with open(in_file) as f:
     for line in f:
       parts = line.strip().split('\t')
@@ -57,10 +55,7 @@ def align(in_file, out_file):
         lex = stp_map[sentence]
       of.write(lex)
   
-  # for txt in orig_set:
-  #   if txt not in stp_map:
-  #     print(txt)
   of.close()
 
-align("tmp_test.txt", 'test.stp.align')
-align("tmp_train.txt", 'train.stp.align')
+align("test.txt", 'test.stp')
+align("train.txt", 'train.stp')
