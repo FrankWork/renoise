@@ -171,40 +171,43 @@ def get_lex_tree_from_str(tree_str):
 
 def split_tree(nodes, e1_tokens, e2_tokens):
   # nodes: a list of (tag, w1, idx1, w2, idx2)
-  tmp_toks = [0 for _ in range(len(nodes)*3)]
+  tree_toks = ['0' for _ in range(len(nodes)*3)]
   max_idx = 0
   for dep in nodes:
     tag, w1, idx1, w2, idx2 = dep
     if w1=='ROOT':
       continue
     
-    w1 = [x for x in w1.split('_') if x]
-    w2 = [x for x in w2.split('_') if x]
+    # w1 = [x for x in w1.split('_') if x]
+    # w2 = [x for x in w2.split('_') if x]
 
-    tmp_toks[idx1] = w1
-    tmp_toks[idx2] = w2
+    tree_toks[idx1] = w1
+    tree_toks[idx2] = w2
 
     max_idx = max(idx1, idx2, max_idx)
   
-  tree_toks = []
-  for w in tmp_toks[:max_idx+1]:
-    if isinstance(w, list):
-      tree_toks.extend(w)
-  
-  # FIXME tmp_toks is not aligned with tree_toks
+  tree_toks = tree_toks[:max_idx+1]
   e1_idx = find_entity_idx(tree_toks, e1_tokens, -1)
   e2_idx = find_entity_idx(tree_toks, e2_tokens, -1)
 
   if e1_idx==-1 or e2_idx==-1:
     # FIXME, ignore 30 instance
-    # print(' '.join(e1_tokens), '||', ' '.join(e2_tokens), '||', ' '.join(tree_toks))
+    print(' '.join(e1_tokens), '||', ' '.join(e2_tokens), '||', ' '.join(tree_toks))
     return None
 
-  # w1 - tag -> w2
-  for dep in nodes:
-    tag, w1, idx1, w2, idx2 = dep
-    if w1=='ROOT':
-      continue
+# TODO 字符串匹配 自定义
+grand ayatollah ali al sistani, grand ayatollah ali 0 sistani
+united nations, united 0
+luiz inácio lula da silva, luiz inácio lula 0 silva
+robert d kaplan, robert 0 kaplan
+don sherwood, 0 sherwood
+sadaharu oh, sadaharu 0
+jonathan lash, jonathan 0
+  # # w1 - tag -> w2
+  # for dep in nodes:
+  #   tag, w1, idx1, w2, idx2 = dep
+  #   if w1=='ROOT':
+  #     continue
   
   
     # if '_' in w1 or '_' in w2:
@@ -310,9 +313,9 @@ def convert_data(txt_file, tree_file, record_file,
         continue
       # children = get_children(tokens, nodes)
       ret_val = split_tree(nodes, e1_tokens, e2_tokens)
-      if not ret_val:
-        continue
-      sdp_tree, e1_tree, e2_tree = ret_val
+      # if not ret_val:
+      #   continue
+      # sdp_tree, e1_tree, e2_tree = ret_val
 
       # # word to idx
       # tokens = [vocab2id[x] if x in vocab2id else vocab2id['UNK'] 
