@@ -50,7 +50,7 @@ def align(in_file, out_file):
       sentence = parts[5]
       sentence = clean_str(sentence)
       # orig_set.add(sentence)
-      lex = 'None\n\n'
+      lex = 'None\n\n'      # ignored sentence because it is too long
       if sentence in stp_map:
         lex = stp_map[sentence]
       of.write(lex)

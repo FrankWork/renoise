@@ -14,8 +14,8 @@ flags.DEFINE_string("kb_entities_file", "RE/entity2id.txt", "")
 flags.DEFINE_string("pre_train_kb_entity_embed_file", "pretrain/entity2vec.txt", "")
 flags.DEFINE_string("txt_train_file", "RE/train.txt", "")
 flags.DEFINE_string("txt_test_file", "RE/test.txt", "")
-flags.DEFINE_string("tree_train_file", "train.stp.align", "")
-flags.DEFINE_string("tree_test_file", "test.stp.align", "")
+flags.DEFINE_string("tree_train_file", "train.stp", "")
+flags.DEFINE_string("tree_test_file", "test.stp", "")
 
 flags.DEFINE_string("out_dir", "preprocess", "")
 flags.DEFINE_string("word_embed_file", "word_embed.npy", "")
@@ -39,7 +39,7 @@ def features(d): return tf.train.Features(feature=d)
 def int64_feature(v): return feature(int64_list=tf.train.Int64List(value=v))
 def bytes_feature(v): return feature(bytes_list=tf.train.BytesList(value=v))
 def feature_list(l): return tf.train.FeatureList(feature=l)
-def feature_lists(d): return tf.train.(feature_list=d)
+def feature_lists(d): return tf.train.FeatureLists(feature_list=d)
 
 def distance_feature(x):
 	if x < -60:
@@ -145,11 +145,10 @@ def clean_str(line):
   line = line.lower()
   line = re.sub('-lrb-', ' ', line)
   line = re.sub('-rrb-', ' ', line)
-  line = re.sub("''", ' ', line)
-  line = re.sub("_", ' ', line)
+  line = re.sub("[&'-\._]", ' ', line)
   line = re.sub('###end###', ' ', line)
-  line = re.sub('\\\/', ' ', line) # remove '\/' in line
-  line = re.sub(r'\\\*', ' ', line) # replace '\*'
+  line = re.sub('\\\/', ' ', line)  # remove '\/'
+  line = re.sub(r'\\\*', ' ', line) # remove '\*'
   line = re.sub(' {2,}', ' ', line)
   line = line.strip()
   return line
@@ -170,44 +169,66 @@ def get_lex_tree_from_str(tree_str):
       nodes.append( (tag, w1, idx1, w2, idx2) )
   return nodes
 
-def get_children(tokens, nodes):
-  children = [[] for _ in range(len(tokens))]
+def split_tree(nodes, e1_tokens, e2_tokens):
+  # nodes: a list of (tag, w1, idx1, w2, idx2)
+  tmp_toks = [0 for _ in range(len(nodes)*3)]
+  max_idx = 0
   for dep in nodes:
     tag, w1, idx1, w2, idx2 = dep
     if w1=='ROOT':
       continue
+    
+    w1 = [x for x in w1.split('_') if x]
+    w2 = [x for x in w2.split('_') if x]
 
-    for w in w1.split('_'):
-      aligned = False
-      for idx, tok in enumerate(tokens):
-        if tok == w and abs(idx-idx1)<10:
-          children[idx].extend(w2.split('_'))
-          aligned=True
-      # if not aligned:
-      #   # print(w1, w2)
-      #   if w1 not in  ['no']:
-      #     raise Exception('not aligned %s: %s' % (w1, " ".join(tokens)))
-  for i in range(len(tokens)):
-    n = len(children[i])
-    if n < FLAGS.max_children:
-      children[i].extend(['PAD']*(FLAGS.max_children - n))
-    elif n> FLAGS.max_children:
-      children[i] = children[i][:FLAGS.max_children]
-    # print("%s :\t %s" % (tokens[i], " ".join(children[i])))
-  return children
+    tmp_toks[idx1] = w1
+    tmp_toks[idx2] = w2
+
+    max_idx = max(idx1, idx2, max_idx)
+  
+  tree_toks = []
+  for w in tmp_toks[:max_idx+1]:
+    if isinstance(w, list):
+      tree_toks.extend(w)
+  
+  # FIXME tmp_toks is not aligned with tree_toks
+  e1_idx = find_entity_idx(tree_toks, e1_tokens, -1)
+  e2_idx = find_entity_idx(tree_toks, e2_tokens, -1)
+
+  if e1_idx==-1 or e2_idx==-1:
+    # FIXME, ignore 30 instance
+    # print(' '.join(e1_tokens), '||', ' '.join(e2_tokens), '||', ' '.join(tree_toks))
+    return None
+
+  # w1 - tag -> w2
+  for dep in nodes:
+    tag, w1, idx1, w2, idx2 = dep
+    if w1=='ROOT':
+      continue
+  
+  
+    # if '_' in w1 or '_' in w2:
+    #   print(w1, w2)
+
+    # for w in w1.split('_'):
+    #   aligned = False
+    #   for idx, tok in enumerate(tokens):
+    #     if tok == w and abs(idx-idx1)<10:
+    #       children[idx].extend(w2.split('_'))
+    #       aligned=True
+  return None, None, None
 
 def find_entity_idx(txt_toks, ent_toks, default_idx):
-  n = len(ent_toks)
-  m = len(txt_toks)
-  idx = 0
-  for i in range(m):
-    if txt_toks[i] == ent_toks[idx]:
-      idx+=1
-      if idx==n:
-        return i-idx+1
-    else:
-      idx=0
-  return default_idx
+  txt = ' '.join(txt_toks)
+  ent = ' '.join(ent_toks)
+  idx = txt.find(ent)
+
+  if idx == -1:
+    return default_idx
+
+  prefix = txt[:idx].split()
+  word_idx = len(prefix)
+  return word_idx
 
 def write_records(bag_key, bag_value, writer):
   kb_e1_id, kb_e2_id, label = bag_key
@@ -263,6 +284,17 @@ def convert_data(txt_file, tree_file, record_file,
       label = relation2id[relation] if relation in relation2id else relation2id['NA']
       length = len(tokens)
 
+      # distance features
+      e1_tokens = clean_str(e1_str).split()
+      e2_tokens = clean_str(e2_str).split() 
+      e1_idx = find_entity_idx(tokens, e1_tokens, -1)
+      e2_idx = find_entity_idx(tokens, e2_tokens, -1)
+      if e1_idx == -1 or e2_idx == -1:
+        raise Exception('can not find entity in the text')
+      
+      dist1 = [distance_feature(i-e1_idx) for i in range(length)]
+      dist2 = [distance_feature(i-e2_idx) for i in range(length)]
+
       # parse lex tree to get children tokens
       tree_str = ""
       line = stp_f.readline()
@@ -276,44 +308,38 @@ def convert_data(txt_file, tree_file, record_file,
       nodes = get_lex_tree_from_str(tree_str)
       if nodes is None:
         continue
-      children = get_children(tokens, nodes)
+      # children = get_children(tokens, nodes)
+      ret_val = split_tree(nodes, e1_tokens, e2_tokens)
+      if not ret_val:
+        continue
+      sdp_tree, e1_tree, e2_tree = ret_val
 
-      # distance features
-      
-      e1_tokens = clean_str(e1_str).split()
-      e2_tokens = clean_str(e2_str).split() 
-      e1_idx = find_entity_idx(tokens, e1_tokens, 0)
-      e2_idx = find_entity_idx(tokens, e2_tokens, length)
-      
-      dist1 = [distance_feature(i-e1_idx) for i in range(length)]
-      dist2 = [distance_feature(i-e2_idx) for i in range(length)]
+      # # word to idx
+      # tokens = [vocab2id[x] if x in vocab2id else vocab2id['UNK'] 
+      #                for x in tokens]
+      # for i in range(len(children)):
+      #   children[i] = [vocab2id[x] if x in vocab2id else vocab2id['UNK'] 
+      #                for x in children[i]]
 
-      # word to idx
-      tokens = [vocab2id[x] if x in vocab2id else vocab2id['UNK'] 
-                     for x in tokens]
-      for i in range(len(children)):
-        children[i] = [vocab2id[x] if x in vocab2id else vocab2id['UNK'] 
-                     for x in children[i]]
-
-      bag_key = (e1_str, e2_str, label) #e1_str+'||'+e2_str+'||'+relation
-      bag_value = (tokens, children, dist1, dist2, length)
-      if bag_key not in data:
-        data[bag_key]=[]
-      data[bag_key].append(bag_value)
+      # bag_key = (e1_str, e2_str, label) #e1_str+'||'+e2_str+'||'+relation
+      # bag_value = (tokens, children, dist1, dist2, length)
+      # if bag_key not in data:
+      #   data[bag_key]=[]
+      # data[bag_key].append(bag_value)
   stp_f.close()
 
   # shard data and convert to tf records data
-  print("write records file ")
-  with tf.python_io.TFRecordWriter(record_file) as writer:
-    if shard:
-      for key in data:
-        # slice a big bag into small bags
-        arr = data[key]
-        for i in range(0, len(arr), FLAGS.max_bag_size):
-          write_records(key, arr[i:i+FLAGS.max_bag_size], writer)
-    else:
-      for key in data:
-        write_records(key, data[key], writer)
+  # print("write records file ")
+  # with tf.python_io.TFRecordWriter(record_file) as writer:
+  #   if shard:
+  #     for key in data:
+  #       # slice a big bag into small bags
+  #       arr = data[key]
+  #       for i in range(0, len(arr), FLAGS.max_bag_size):
+  #         write_records(key, arr[i:i+FLAGS.max_bag_size], writer)
+  #   else:
+  #     for key in data:
+  #       write_records(key, data[key], writer)
 
 def main(_):
   if not os.path.exists(FLAGS.out_dir):
