@@ -153,7 +153,7 @@ def clean_str(line):
   line = line.strip()
   return line
 
-def get_lex_tree_from_str(tree_str):
+def get_nodes_from_str(tree_str):
   nodes = []
   for line in tree_str.split('\n'):
     if line=='None':
@@ -164,8 +164,8 @@ def get_lex_tree_from_str(tree_str):
       if not m:
         raise Exception('can not parse %s' % line)
       tag, w1, idx1, w2, idx2 = m.groups()
-      idx1 = int(idx1)-1
-      idx2 = int(idx2)-1
+      idx1 = int(idx1)
+      idx2 = int(idx2)
       nodes.append( (tag, w1, idx1, w2, idx2) )
   return nodes
 
@@ -182,9 +182,10 @@ def brute_match(text, pattern, meta_char='<META>'):
       return i
   return -1
 
-def split_tree(nodes, e1_tokens, e2_tokens):
+def find_entity_index_from_tree(nodes, e1_tokens, e2_tokens):
   # nodes: a list of (tag, w1, idx1, w2, idx2)
-  tree_toks = ['<META>' for _ in range(len(nodes)*3)] # restore words from tree
+  # restore words from tree and find entity index
+  tree_toks = ['<META>' for _ in range(len(nodes)*3)] 
   max_idx = 0
   for dep in nodes:
     tag, w1, idx1, w2, idx2 = dep
@@ -197,28 +198,69 @@ def split_tree(nodes, e1_tokens, e2_tokens):
     max_idx = max(idx1, idx2, max_idx)
   
   tree_toks = tree_toks[:max_idx+1]
-  e1_idx = brute_match(tree_toks, e1_tokens)
-  e2_idx = brute_match(tree_toks, e2_tokens)
+
+  e1_idx = find_entity_idx(tree_toks, e1_tokens, -1)
+  e2_idx = find_entity_idx(tree_toks, e2_tokens, -1)
+
+  if e1_idx == -1:
+    e1_idx = brute_match(tree_toks, e1_tokens)
+  if e2_idx == -1:
+    e2_idx = brute_match(tree_toks, e2_tokens)
 
   if e1_idx==-1 or e2_idx==-1:
     raise Exception('can not find entity in the tree')
-    
-  # # w1 - tag -> w2
-  # for dep in nodes:
-  #   tag, w1, idx1, w2, idx2 = dep
-  #   if w1=='ROOT':
-  #     continue
-  
-  
-    # if '_' in w1 or '_' in w2:
-    #   print(w1, w2)
+  return e1_idx, e2_idx, max_idx
 
-    # for w in w1.split('_'):
-    #   aligned = False
-    #   for idx, tok in enumerate(tokens):
-    #     if tok == w and abs(idx-idx1)<10:
-    #       children[idx].extend(w2.split('_'))
-    #       aligned=True
+class Node(object):
+  def __init__(self, index):
+    self.index = index
+    self.parent = None
+    self.word = ""
+    self.children = []
+    self.tags     = []
+    
+  def is_leaf(self):
+    return len(self.children) == 0
+  def is_valid(self):
+    return self.word != ""
+
+  def __hash__(self):
+    return self.index
+  def __eq__(self, other):
+    return self.index == other.index
+
+def split_tree(nodes, e1_tokens, e2_tokens):
+  # nodes: a list of (tag, w1, idx1, w2, idx2)
+  e1_idx, e2_idx, max_idx = find_entity_index_from_tree(nodes, e1_tokens, e2_tokens)
+  
+  # build tree structure from nodes
+  forest = [Node(i) for i in range(max_idx+1)]
+  for tag, w1, idx1, w2, idx2 in nodes:
+    node1 = forest[idx1]
+    node2 = forest[idx2]
+    node1.word = w1
+    node2.word = w2
+    node1.children.append(node2)
+    node1.tags.append(tag)
+    node2.parent = node1
+
+  root = forest[0]
+  assert root.word == 'ROOT'
+  assert len(root.children) == 1
+  
+  # e1_nodes = forest[e1_idx: e1_idx+len(e1_tokens)]
+  # e2_nodes = forest[e2_idx: e2_idx+len(e2_tokens)]
+  # # get shortest dependency path
+  # sdp = []
+  # e1_set = set(e1_nodes)
+  # e2_set = set(e2_nodes)
+  # node = root.children[0]
+  # for child in root.children:
+  #   if child not in 
+
+
+  # get sub-tree of entity
+
   return None, None, None
 
 def find_entity_idx(txt_toks, ent_toks, default_idx):
@@ -308,11 +350,12 @@ def convert_data(txt_file, tree_file, record_file,
         if line == '\n':
           break
       
-      nodes = get_lex_tree_from_str(tree_str)
+      nodes = get_nodes_from_str(tree_str)
       if nodes is None:
         continue
       # children = get_children(tokens, nodes)
       ret_val = split_tree(nodes, e1_tokens, e2_tokens)
+     
       # if not ret_val:
       #   continue
       # sdp_tree, e1_tree, e2_tree = ret_val
@@ -355,10 +398,10 @@ def main(_):
   relations, relation2id = load_relation()
   vocab,     vocab2id    = load_vocab()
   entities,  entity2id   = load_kb_entities()
-  convert_data(os.path.join(FLAGS.data_dir, FLAGS.txt_train_file),
-               os.path.join(FLAGS.data_dir, FLAGS.tree_train_file),
-               os.path.join(FLAGS.out_dir, FLAGS.train_records),
-               entity2id, relation2id, vocab2id)
+  # convert_data(os.path.join(FLAGS.data_dir, FLAGS.txt_train_file),
+  #              os.path.join(FLAGS.data_dir, FLAGS.tree_train_file),
+  #              os.path.join(FLAGS.out_dir, FLAGS.train_records),
+  #              entity2id, relation2id, vocab2id)
   convert_data(os.path.join(FLAGS.data_dir, FLAGS.txt_test_file),
                os.path.join(FLAGS.data_dir, FLAGS.tree_test_file),
                os.path.join(FLAGS.out_dir, FLAGS.test_records),
