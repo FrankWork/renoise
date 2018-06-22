@@ -9,11 +9,9 @@ flags = tf.app.flags
 
 flags.DEFINE_string("data_dir", "data", "data directory")
 flags.DEFINE_string("pre_train_word_embed_file", "vec.txt", "")
-flags.DEFINE_string("relation_file", "RE/relation2id.txt", "")
-flags.DEFINE_string("kb_entities_file", "RE/entity2id.txt", "")
-flags.DEFINE_string("pre_train_kb_entity_embed_file", "pretrain/entity2vec.txt", "")
-flags.DEFINE_string("txt_train_file", "RE/train.txt", "")
-flags.DEFINE_string("txt_test_file", "RE/test.txt", "")
+flags.DEFINE_string("relation_file", "relation2id.txt", "")
+flags.DEFINE_string("txt_train_file", "train.txt", "")
+flags.DEFINE_string("txt_test_file", "test.txt", "")
 flags.DEFINE_string("tree_train_file", "train.stp", "")
 flags.DEFINE_string("tree_test_file", "test.stp", "")
 
@@ -33,7 +31,7 @@ FLAGS = flags.FLAGS
 feature = tf.train.Feature
 sequence_example = tf.train.SequenceExample
 
-regex = re.compile("([^\()]+)\((.+)-(\d+)'*, (.+)-(\d+)'*\)")
+
 
 def features(d): return tf.train.Features(feature=d)
 def int64_feature(v): return feature(int64_list=tf.train.Int64List(value=v))
@@ -153,64 +151,6 @@ def clean_str(line):
   line = line.strip()
   return line
 
-def get_nodes_from_str(tree_str):
-  nodes = []
-  for line in tree_str.split('\n'):
-    if line=='None':
-      return None
-
-    if line != '\n' and line != "":
-      m=regex.search(line)
-      if not m:
-        raise Exception('can not parse %s' % line)
-      tag, w1, idx1, w2, idx2 = m.groups()
-      idx1 = int(idx1)
-      idx2 = int(idx2)
-      nodes.append( (tag, w1, idx1, w2, idx2) )
-  return nodes
-
-
-def brute_match(text, pattern, meta_char='<META>'):
-  find = None
-  for i in range(len(text)):
-    find = True
-    for j in range(len(pattern)):
-      if text[i+j] != pattern[j] and text[i+j]!=meta_char:
-        find = False
-        break
-    if find:
-      return i
-  return -1
-
-def find_entity_index_from_tree(nodes, e1_tokens, e2_tokens):
-  # nodes: a list of (tag, w1, idx1, w2, idx2)
-  # restore words from tree and find entity index
-  tree_toks = ['<META>' for _ in range(len(nodes)*3)] 
-  max_idx = 0
-  for dep in nodes:
-    tag, w1, idx1, w2, idx2 = dep
-    if w1=='ROOT':
-      continue
-  
-    tree_toks[idx1] = w1
-    tree_toks[idx2] = w2
-
-    max_idx = max(idx1, idx2, max_idx)
-  
-  tree_toks = tree_toks[:max_idx+1]
-
-  e1_idx = find_entity_idx(tree_toks, e1_tokens, -1)
-  e2_idx = find_entity_idx(tree_toks, e2_tokens, -1)
-
-  if e1_idx == -1:
-    e1_idx = brute_match(tree_toks, e1_tokens)
-  if e2_idx == -1:
-    e2_idx = brute_match(tree_toks, e2_tokens)
-
-  if e1_idx==-1 or e2_idx==-1:
-    raise Exception('can not find entity in the tree')
-  return e1_idx, e2_idx, max_idx
-
 class Node(object):
   def __init__(self, index):
     self.index = index
@@ -223,11 +163,42 @@ class Node(object):
     return len(self.children) == 0
   def is_valid(self):
     return self.word != ""
+  
+  def __cmp__(self, other):
+    '''python2'''
+    if self.index < other.index:
+      return -1
+    elif self.index == other.index:
+      return 0
+    else:
+       return 1
+
+  def __gt__(self, other):
+    return self.index > other.index
+
+  def __lt__(self, other):
+    '''python3'''
+    return self.index < other.index
+
+  def __eq__(self, other):
+    return self.index == other.index
 
   def __hash__(self):
     return self.index
-  def __eq__(self, other):
-    return self.index == other.index
+
+  def __str__(self):
+    return '%s/%d' % (self.word, self.index)
+  
+  def __repr__(self):
+    return str(self)
+
+def get_shorted_dep_path(node, e1_set, e2_set, sdp):
+  if node in e1_set or node in e2_set:
+    return
+  
+  sdp.add(node)
+  for child in node.children:
+    get_shorted_dep_path(child, e1_set, e2_set, sdp)
 
 def split_tree(nodes, e1_tokens, e2_tokens):
   # nodes: a list of (tag, w1, idx1, w2, idx2)
@@ -248,15 +219,18 @@ def split_tree(nodes, e1_tokens, e2_tokens):
   assert root.word == 'ROOT'
   assert len(root.children) == 1
   
-  # e1_nodes = forest[e1_idx: e1_idx+len(e1_tokens)]
-  # e2_nodes = forest[e2_idx: e2_idx+len(e2_tokens)]
-  # # get shortest dependency path
-  # sdp = []
-  # e1_set = set(e1_nodes)
-  # e2_set = set(e2_nodes)
-  # node = root.children[0]
-  # for child in root.children:
-  #   if child not in 
+  e1_nodes = forest[e1_idx: e1_idx+len(e1_tokens)]
+  e2_nodes = forest[e2_idx: e2_idx+len(e2_tokens)]
+  # get shortest dependency path
+  sdp = set()
+  e1_set = set(e1_nodes)
+  e2_set = set(e2_nodes)
+  node = root.children[0]
+  get_shorted_dep_path(node, e1_set, e2_set, sdp)
+  
+  if len(sdp)==0:
+    sdp = forest[1:]
+  print(e1_nodes, e2_nodes, sorted(sdp))
 
 
   # get sub-tree of entity
@@ -326,7 +300,7 @@ def convert_data(txt_file, tree_file, record_file,
       e1_kb, e2_kb = parts[0], parts[1]
       e1_str, e2_str, relation = parts[2], parts[3], parts[4]
       tokens = clean_str(parts[5]).split()
-      label = relation2id[relation] if relation in relation2id else relation2id['NA']
+      # label = relation2id[relation] if relation in relation2id else relation2id['NA']
       length = len(tokens)
 
       # distance features
@@ -355,6 +329,9 @@ def convert_data(txt_file, tree_file, record_file,
         continue
       # children = get_children(tokens, nodes)
       ret_val = split_tree(nodes, e1_tokens, e2_tokens)
+
+      if i > 10:
+        return
      
       # if not ret_val:
       #   continue
@@ -391,13 +368,16 @@ def main(_):
   if not os.path.exists(FLAGS.out_dir):
     os.makedirs(FLAGS.out_dir)
 
-  convert_word_embedding()
-  convert_entities_embedding()
-  # embed_file = os.path.join(FLAGS.out_dir, FLAGS.word_embed_file)
-  # embed = np.load(embed_file)
-  relations, relation2id = load_relation()
-  vocab,     vocab2id    = load_vocab()
-  entities,  entity2id   = load_kb_entities()
+  # convert_word_embedding()
+  # convert_entities_embedding()
+  # # embed_file = os.path.join(FLAGS.out_dir, FLAGS.word_embed_file)
+  # # embed = np.load(embed_file)
+  # relations, relation2id = load_relation()
+  # vocab,     vocab2id    = load_vocab()
+  # entities,  entity2id   = load_kb_entities()
+  relations, relation2id = None, None
+  vocab,     vocab2id    = None, None
+  entities,  entity2id   = None, None
   # convert_data(os.path.join(FLAGS.data_dir, FLAGS.txt_train_file),
   #              os.path.join(FLAGS.data_dir, FLAGS.tree_train_file),
   #              os.path.join(FLAGS.out_dir, FLAGS.train_records),
