@@ -70,7 +70,7 @@ def find_entity_index_from_tree(dep_edges, e1_tokens, e2_tokens):
   return e1_idx, e2_idx, max_idx
 
 def get_shortest_path(dep_text, entity_pair):
-    if dep_text[0] == 'None':
+    if dep_text[0] == 'None\n':
         return None
 
     dep_edges = []
@@ -79,6 +79,7 @@ def get_shortest_path(dep_text, entity_pair):
     for dep_str in dep_text:
         m=regex.search(dep_str)
         if not m:
+            print(dep_text)
             raise Exception('can not parse %s' % dep_str)
         tag, w1, idx1, w2, idx2 = m.groups()
         idx1 = int(idx1)
@@ -102,16 +103,33 @@ def get_shortest_path(dep_text, entity_pair):
     e1_nodes = [node for node in e1_nodes if node in nodes_set]
     e2_nodes = [node for node in e2_nodes if node in nodes_set]
 
+    if len(e1_nodes) == 0 or len(e2_nodes) == 0:
+        print(entity_pair)
+# ['houston', 'chicago']
+# ['chicago', 'houston']
+# ['dallas', 'chicago']
+# ['chicago', 'dallas']
+# ['giants stadium', 'buffalo']
+# ['buffalo', 'doug jolley']
 
-    print('-'*80)
-    print(entity_pair)
-    graph = nx.Graph(edges)
-    for s in e1_nodes:
-        for t in e2_nodes:
-            n = nx.shortest_path_length(graph, source=s, target=t)
-            path = nx.shortest_path(graph, source=s, target=t)
-            print('{0}\t{1}'.format(n, path))
-    print('-'*80)
+
+    # # print('-'*80)
+    # # print(entity_pair)
+    # graph = nx.Graph(edges)
+    # min_n = 1000
+    # s_path = None
+    # for s in e1_nodes:
+    #     for t in e2_nodes:
+    #         path = nx.shortest_path(graph, source=s, target=t)
+    #         n = len(path)
+    #         if min_n > n:
+    #             min_n = n
+    #             s_path = path
+    # # return s_path
+    # # print(' '.join(s_path))
+    # # print('-'*80)
+    # assert len(s_path) != 0
+
 
 def get_sdp_for_all(parser_file, entity_file, shortest_path_file):
     # load entity pairs
@@ -133,8 +151,8 @@ def get_sdp_for_all(parser_file, entity_file, shortest_path_file):
             else:
                 get_shortest_path(dep_text, entity_pairs[n_tree])
                 n_tree += 1
-                if n_tree > 20:
-                    break
+                # if n_tree > 20:
+                #     break
                 # if n_tree % 100*100 == 0:
                 #     print(n_tree)
                 dep_text.clear() # python3
@@ -151,6 +169,7 @@ if __name__ == '__main__':
         os.makedirs('preprocess')
 
     get_sdp_for_all("data/test.stp", "data/test.entity_pair", "preprocess/test.tree")
+    get_sdp_for_all("data/train.stp", "data/train.entity_pair", "preprocess/train.tree")
 
 # the occasion was suitably exceptional : a reunion of the 1970s-era sam rivers trio , with dave_holland on bass and barry_altschul on drums .
 # det(occasion-2, the-1)
