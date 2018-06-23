@@ -37,12 +37,12 @@ def brute_match(text, pattern):
       return i
   return -1
 
-def find_entity_index_from_tree(dep_edges, e1_tokens, e2_tokens):
-  # dep_edges: a list of (tag, w1, idx1, w2, idx2)
+def find_entity_index_from_tree(edge_list, e1_tokens, e2_tokens):
+  # edge_list: a list of (tag, w1, idx1, w2, idx2)
   # restore words from tree and find entity index
-  tree_toks = ['<META>' for _ in range(len(dep_edges)*3)] 
+  tree_toks = ['<META>' for _ in range(len(edge_list)*3)] 
   max_idx = 0
-  for dep in dep_edges:
+  for dep in edge_list:
     tag, w1, idx1, w2, idx2 = dep
     # if w1=='ROOT':
     #   continue
@@ -67,14 +67,14 @@ def find_entity_index_from_tree(dep_edges, e1_tokens, e2_tokens):
 
   if e1_idx==-1 or e2_idx==-1:
     raise Exception('can not find entity in the tree')
-  return e1_idx, e2_idx, max_idx
+  return e1_idx, e2_idx, tree_toks
 
 def get_shortest_path(dep_text, entity_pair):
     if dep_text[0] == 'None\n':
         return None
 
-    dep_edges = []
-    edges = []
+    edge_list = []
+    edges_map = {}
     nodes_set = set()
     for dep_str in dep_text:
         m=regex.search(dep_str)
@@ -84,52 +84,55 @@ def get_shortest_path(dep_text, entity_pair):
         tag, w1, idx1, w2, idx2 = m.groups()
         idx1 = int(idx1)
         idx2 = int(idx2)
-        dep_edges.append( (tag, w1, idx1, w2, idx2) )
+        edge_list.append( (tag, w1, idx1, w2, idx2) )
         node1 = '{0}-{1}'.format(w1, idx1)
         node2 = '{0}-{1}'.format(w2, idx2)
         nodes_set.add(node1)
         nodes_set.add(node2)
-        edges.append( (node1, node2) )
+        edges_map[(node1, node2)] = tag
     
     e1_toks = entity_pair[0].split()
     e2_toks = entity_pair[1].split()
-    e1_idx, e2_idx, _ = find_entity_index_from_tree(dep_edges, e1_toks, e2_toks)
+    e1_idx, e2_idx, _ = find_entity_index_from_tree(edge_list, e1_toks, e2_toks)
     e1_nodes = ['{0}-{1}'.format(w, i+e1_idx) for i, w in enumerate(e1_toks)]
     e2_nodes = ['{0}-{1}'.format(w, i+e2_idx) for i, w in enumerate(e2_toks)]
 
     # # WARNING: some tokens of the entity are ignored by the lex parser
-    # for node in e1_nodes + e2_nodes:
-    #     assert node in nodes_set
     e1_nodes = [node for node in e1_nodes if node in nodes_set]
     e2_nodes = [node for node in e2_nodes if node in nodes_set]
 
-    if len(e1_nodes) == 0 or len(e2_nodes) == 0:
-        print(entity_pair)
-# ['houston', 'chicago']
-# ['chicago', 'houston']
-# ['dallas', 'chicago']
-# ['chicago', 'dallas']
-# ['giants stadium', 'buffalo']
-# ['buffalo', 'doug jolley']
+    assert len(e1_nodes) != 0 and len(e2_nodes) != 0
 
-
-    # # print('-'*80)
-    # # print(entity_pair)
-    # graph = nx.Graph(edges)
-    # min_n = 1000
-    # s_path = None
-    # for s in e1_nodes:
-    #     for t in e2_nodes:
-    #         path = nx.shortest_path(graph, source=s, target=t)
-    #         n = len(path)
-    #         if min_n > n:
-    #             min_n = n
-    #             s_path = path
-    # # return s_path
-    # # print(' '.join(s_path))
-    # # print('-'*80)
-    # assert len(s_path) != 0
-
+    # print('-'*80)
+    # print(entity_pair)
+    graph = nx.Graph(list(edges_map.keys()))
+    min_n = 1000
+    s_path = None
+    for s in e1_nodes:
+        for t in e2_nodes:
+            path = nx.shortest_path(graph, source=s, target=t)
+            n = len(path)
+            if min_n > n:
+                min_n = n
+                s_path = path
+    # return s_path
+    # print(' '.join(s_path))
+    # print('-'*80)
+    assert len(s_path) != 0
+    n = len(path)
+    ret_path = [path[0].split('-')[0] ]
+    for i in range(n-1):
+        node1 = path[i]
+        node2 = path[i+1]
+        tag = None
+        if (node1, node2) in edges_map:
+            tag = edges_map[(node1, node2)]
+        else:
+            tag = edges_map[(node2, node1)]
+            tag = tag + '-'
+        ret_path.append(tag)
+        ret_path.append(node2.split('-')[0])
+    return ret_path[1:-1] # ignore first and last element
 
 def get_sdp_for_all(parser_file, entity_file, shortest_path_file):
     # load entity pairs
@@ -149,7 +152,8 @@ def get_sdp_for_all(parser_file, entity_file, shortest_path_file):
             if line != '\n':
                 dep_text.append(line)
             else:
-                get_shortest_path(dep_text, entity_pairs[n_tree])
+                path = get_shortest_path(dep_text, entity_pairs[n_tree])
+                fw.write(' '.join(path) + '\n')
                 n_tree += 1
                 # if n_tree > 20:
                 #     break
@@ -169,53 +173,4 @@ if __name__ == '__main__':
         os.makedirs('preprocess')
 
     get_sdp_for_all("data/test.stp", "data/test.entity_pair", "preprocess/test.tree")
-    get_sdp_for_all("data/train.stp", "data/train.entity_pair", "preprocess/train.tree")
-
-# the occasion was suitably exceptional : a reunion of the 1970s-era sam rivers trio , with dave_holland on bass and barry_altschul on drums .
-# det(occasion-2, the-1)
-# nsubj(exceptional-5, occasion-2)
-# cop(exceptional-5, was-3)
-# advmod(exceptional-5, suitably-4)
-# root(ROOT-0, exceptional-5)
-# det(reunion-8, a-7)
-# dep(exceptional-5, reunion-8)
-# case(trio-14, of-9)
-# det(trio-14, the-10)
-# amod(trio-14, 1970s-era-11)
-# compound(trio-14, sam-12)
-# compound(trio-14, rivers-13)
-# nmod(reunion-8, trio-14)
-# case(dave_holland-17, with-16)
-# advcl(exceptional-5, dave_holland-17)
-# case(bass-19, on-18)
-# nmod(dave_holland-17, bass-19)
-# cc(dave_holland-17, and-20)
-# conj(dave_holland-17, barry_altschul-21)
-# case(drums-23, on-22)
-# nmod(barry_altschul-21, drums-23)
-
-# det(occasion-2, the-1)
-# nsubj(exceptional-5, occasion-2)
-# cop(exceptional-5, was-3)
-# advmod(exceptional-5, suitably-4)
-# root(ROOT-0, exceptional-5)
-# det(reunion-8, a-7)
-# parataxis(exceptional-5, reunion-8)
-# case(rivers-14, of-9)
-# det(rivers-14, the-10)
-# nummod(rivers-14, 1970s-11)
-# compound(rivers-14, era-12)
-# compound(rivers-14, sam-13)
-# nmod:of(reunion-8, rivers-14)
-# advmod(reunion-8, trio-15)
-# case(dave-17, with-16)
-# nmod:with(trio-15, dave-17)
-# dep(dave-17, holland-18)
-# case(bass-20, on-19)
-# nmod:on(holland-18, bass-20)
-# cc(holland-18, and-21)
-# advmod(altschul-23, barry-22)
-# dep(dave-17, altschul-23)
-# conj:and(holland-18, altschul-23)
-# case(drums-25, on-24)
-# nmod:on(altschul-23, drums-25)
+    # get_sdp_for_all("data/train.stp", "data/train.entity_pair", "preprocess/train.tree")
