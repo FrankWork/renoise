@@ -2,6 +2,7 @@ import argparse
 import os
 import re
 import networkx as nx
+import collections
 
 pattern = re.compile(r'.+?\((.+?), (.+?)\)')
 regex = re.compile("([^\()]+)\((.+)-(\d+)'*, (.+)-(\d+)'*\)")
@@ -69,10 +70,41 @@ def find_entity_index_from_tree(edge_list, e1_tokens, e2_tokens):
     raise Exception('can not find entity in the tree')
   return e1_idx, e2_idx, tree_toks
 
-def get_shortest_path(dep_text, entity_pair):
+def get_shortest_path(edges_map, e1_nodes, e2_nodes):
+    # get shortest dependency path
+    graph = nx.Graph(list(edges_map.keys()))
+    min_n = 1000
+    s_path = None
+    for s in e1_nodes:
+        for t in e2_nodes:
+            path = nx.shortest_path(graph, source=s, target=t)
+            n = len(path)
+            if min_n > n:
+                min_n = n
+                s_path = path
+
+    assert len(s_path) != 0
+    n = len(path)
+    path_tag = [path[0].split('-')[0] ]
+    for i in range(n-1):
+        node1 = path[i]
+        node2 = path[i+1]
+        tag = None
+        if (node1, node2) in edges_map:
+            tag = edges_map[(node1, node2)]
+        else:
+            tag = edges_map[(node2, node1)]
+            tag = tag + '-'
+        path_tag.append(tag)
+        path_tag.append(node2.split('-')[0])
+    shortest_path = path_tag[1:-1] # ignore first and last element
+    return shortest_path
+
+def get_splited_tree(dep_text, entity_pair):
     if dep_text[0] == 'None\n':
         return None
 
+    # extract word dependency from tree string 
     edge_list = []
     edges_map = {}
     nodes_set = set()
@@ -91,6 +123,7 @@ def get_shortest_path(dep_text, entity_pair):
         nodes_set.add(node2)
         edges_map[(node1, node2)] = tag
     
+    # find entity position in tree structure, and construct entity nodes
     e1_toks = entity_pair[0].split()
     e2_toks = entity_pair[1].split()
     e1_idx, e2_idx, _ = find_entity_index_from_tree(edge_list, e1_toks, e2_toks)
@@ -103,36 +136,34 @@ def get_shortest_path(dep_text, entity_pair):
 
     assert len(e1_nodes) != 0 and len(e2_nodes) != 0
 
-    # print('-'*80)
-    # print(entity_pair)
-    graph = nx.Graph(list(edges_map.keys()))
-    min_n = 1000
-    s_path = None
-    for s in e1_nodes:
-        for t in e2_nodes:
-            path = nx.shortest_path(graph, source=s, target=t)
-            n = len(path)
-            if min_n > n:
-                min_n = n
-                s_path = path
-    # return s_path
-    # print(' '.join(s_path))
-    # print('-'*80)
-    assert len(s_path) != 0
-    n = len(path)
-    ret_path = [path[0].split('-')[0] ]
-    for i in range(n-1):
-        node1 = path[i]
-        node2 = path[i+1]
-        tag = None
-        if (node1, node2) in edges_map:
-            tag = edges_map[(node1, node2)]
-        else:
-            tag = edges_map[(node2, node1)]
-            tag = tag + '-'
-        ret_path.append(tag)
-        ret_path.append(node2.split('-')[0])
-    return ret_path[1:-1] # ignore first and last element
+    shortest_path = get_shortest_path(edges_map, e1_nodes, e2_nodes)
+
+    # get subtree of the entity
+    dgraph = nx.DiGraph(list(edges_map.keys()))
+
+    def get_subtree(dgraph, entity_nodes, other_nodes):
+        other_nodes = set(other_nodes)
+
+        q = collections.deque()
+        for node in entity_nodes:
+            q.append(node)
+
+        subtree = set()
+        # subtree = list()
+        while len(q) != 0:
+            node = q.popleft()
+            subtree.add(node)
+            # subtree.append(node)
+            for child in dgraph.successors(node):
+                print(node, child)
+                if child not in subtree and child not in other_nodes:
+                    q.append(child)
+        return sorted(subtree)
+    print(e1_nodes, e2_nodes)
+    e1_tree = get_subtree(dgraph, e1_nodes, e2_nodes)
+    e2_tree = get_subtree(dgraph, e2_nodes, e1_nodes)
+
+    return shortest_path, e1_tree, e2_tree
 
 def get_sdp_for_all(parser_file, entity_file, shortest_path_file):
     # load entity pairs
@@ -152,11 +183,14 @@ def get_sdp_for_all(parser_file, entity_file, shortest_path_file):
             if line != '\n':
                 dep_text.append(line)
             else:
-                path = get_shortest_path(dep_text, entity_pairs[n_tree])
-                fw.write(' '.join(path) + '\n')
+                short_path, e1_tree, e2_tree = get_splited_tree(dep_text, entity_pairs[n_tree])
+                # fw.write(' '.join(short_path) + '\n')
+                fw.write('{0}\t{1}\t{2}\n'.format(' '.join(short_path),
+                                                  ' '.join(e1_tree),
+                                                  ' '.join(e2_tree)))
                 n_tree += 1
-                # if n_tree > 20:
-                #     break
+                if n_tree > 0:
+                    break
                 # if n_tree % 100*100 == 0:
                 #     print(n_tree)
                 dep_text.clear() # python3
