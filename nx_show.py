@@ -30,28 +30,30 @@ dep_list = [
 
 
 dep_list = [
-"det(occasion-2, the-1)",
-"nsubj(exceptional-5, occasion-2)",
-"cop(exceptional-5, was-3)",
-"advmod(exceptional-5, suitably-4)",
-"root(ROOT-0, exceptional-5)",
-"det(reunion-8, a-7)",
-"dep(exceptional-5, reunion-8)",
-"case(trio-14, of-9)",
-"det(trio-14, the-10)",
-"amod(trio-14, 1970s-era-11)",
-"compound(trio-14, sam-12)",
-"compound(trio-14, rivers-13)",
-"nmod(reunion-8, trio-14)",
-"case(dave_holland-17, with-16)",
-"advcl(exceptional-5, dave_holland-17)",
-"case(bass-19, on-18)",
-"nmod(dave_holland-17, bass-19)",
-"cc(dave_holland-17, and-20)",
-"conj(dave_holland-17, barry_altschul-21)",
-"case(drums-23, on-22)",
-"nmod(barry_altschul-21, drums-23)",
+"det(fox-4, a-1)",
+"amod(fox-4, quick-2)",
+"amod(fox-4, brown-3)",
+"root(ROOT-0, fox-4)",
+"dep(fox-4, jumps-5)",
+"case(dog-9, over-6)",
+"det(dog-9, the-7)",
+"amod(dog-9, lazy-8)",
+"nmod(jumps-5, dog-9)",
 ]
+
+# dep_list = [
+# 'det(three-2, the-1)',
+# 'root(ROOT-0, three-2)',
+# 'case(states-5, from-3)',
+# 'amod(states-5, interior-4)',
+# 'nmod:from(three-2, states-5)',
+# 'dep(three-2, chicago-7)',
+# 'dep(three-2, dallas-9)',
+# 'conj:and(chicago-7, dallas-9)',
+# 'cc(chicago-7, and-10)',
+# 'dep(three-2, houston-11)',
+# 'conj:and(chicago-7, houston-11)',
+# ]
 
 pattern = re.compile(r'.+?\((.+?), (.+?)\)')
 edges = []
@@ -61,14 +63,19 @@ for p in dep_list:
   # print(a, b)
   edges.append( (a, b))
   
-graph = nx.Graph(edges)
-path = nx.shortest_path(graph, source='dave_holland-17', target='barry_altschul-21')
-print(type(path), len(path))
-print('{0}'.format(path))
-n = nx.shortest_path_length(graph, source='dave_holland-17', target='barry_altschul-21')
-print(n)
+# graph = nx.Graph(edges)
+# path = nx.shortest_path(graph, source='fox-4', target='dog-9')
+# # path = nx.shortest_path(graph, source='dallas-9', target='houston-11')
+# print('{0}'.format(path))
 
-# plt.subplot(121)
-nx.draw(graph, with_labels=True, font_weight='bold')
-# plt.subplot(122)
-plt.show()
+# # plt.subplot(121)
+# nx.draw(graph, with_labels=True, font_weight='bold')
+
+dgraph = nx.DiGraph([(1,2), (2,3), (3,4)])
+for node in dgraph.successors(1):
+  print(node)
+
+# nx.draw(dgraph, with_labels=True, font_weight='bold')
+# # plt.subplot(122)
+# plt.show()
+
