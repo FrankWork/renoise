@@ -207,7 +207,6 @@ if __name__ == '__main__':
         os.makedirs('preprocess')
 
     get_sdp_for_all("data/test.stp", "data/test.entity_pair", "preprocess/test.tree")
-<<<<<<< HEAD
     get_sdp_for_all("data/train.stp", "data/train.entity_pair", "preprocess/train.tree")
 
 # the occasion was suitably exceptional : a reunion of the 1970s-era sam rivers trio , with dave_holland on bass and barry_altschul on drums .
@@ -261,6 +260,3 @@ if __name__ == '__main__':
 
 
 # awk -v FS='\t' -v OFS='\t' '{print $3, $4}' test.txt > test.entity_pair
-=======
-    # get_sdp_for_all("data/train.stp", "data/train.entity_pair", "preprocess/train.tree")
->>>>>>> a4a1c26ef4636910f6f10c2899da3f127e7b6371
