@@ -219,3 +219,6 @@ if __name__ == '__main__':
 # conj:and(holland-18, altschul-23)
 # case(drums-25, on-24)
 # nmod:on(altschul-23, drums-25)
+
+
+# awk -v FS='\t' -v OFS='\t' '{print $3, $4}' test.txt > test.entity_pair

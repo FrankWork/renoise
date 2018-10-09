@@ -2,6 +2,33 @@ import networkx as nx
 import re
 import matplotlib.pyplot as plt
 
+
+text = "a quick brown fox jumps over the lazy dog"
+dep_list = [
+"det(fox-4, a-1)",
+"amod(fox-4, quick-2)",
+"amod(fox-4, brown-3)",
+"root(ROOT-0, fox-4)",
+"dep(fox-4, jumps-5)",
+"case(dog-9, over-6)",
+"det(dog-9, the-7)",
+"amod(dog-9, lazy-8)",
+"nmod(jumps-5, dog-9)",
+]
+
+'''
+          ROOT
+           |
+          fox
+       /   |   \     \\
+      a  quick brown jumps
+                      |
+                      dogs
+                    /  |  \\
+                 over the lazy
+'''
+
+
 dep_list = [
 "det(occasion-2, the-1)",
 "nsubj(exceptional-5, occasion-2)",
